@@ -1,0 +1,41 @@
+---
+title: "SKhare_RGanesh_Midterm_MUSA508"
+author: "Samriddhi Khare, Roshini Ganesh"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    code_download: true
+    theme: flatly 
+---
+
+
+```{r setup, include=FALSE}
+  knitr::opts_chunk$set(
+    echo = TRUE,
+    warning = FALSE,
+    message = FALSE,
+    out.width = '100%',
+    fig.retina =3
+  )
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple f
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
