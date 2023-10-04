@@ -8,14 +8,14 @@ output:
     toc_float: true
     code_folding: hide
     code_download: true
-    theme: flatly 
+    theme: journal  
 ---
 
 # Introduction
 
 Philly is sooooo... hosuing prediction....  
 
-<img src="D:/Fall_2023/PPA/Midterm/data/33rd-Street-Corner-of-West-Lehigh-Ave.jpg" width="400" align="right" style="display: inline; margin: 0 10px;"/>
+<img src="D:/Fall_2023/PPA/Midterm/images/33rd-Street-Corner-of-West-Lehigh-Ave.jpg" width="400" align="right" style="display: inline; margin: 0 10px;"/>
 
 This code is built upon the classwork discussed [here](https://github.com/mafichman/musa_5080_2023/tree/main).
 
@@ -72,7 +72,7 @@ Data sources used include census and opendata philly
 
 Data provided was cleaned and new variable were created 
 
-```{r}
+```{r results= 'hide'}
 data <- 
   st_read("D:/Fall_2023/PPA/Midterm/data/studentData.geojson") %>%
   st_transform('ESRI:102286')
@@ -95,7 +95,7 @@ The variables chosen for this analysis include:
 3. 
 
 
-```{r load_variables, cache=TRUE, results= 'hide'}
+```{r census, cache=TRUE, results= 'hide'}
 
 acs_variable_list.2021 <- load_variables(2021, #year
                                          "acs5", #five year ACS estimates
@@ -131,7 +131,26 @@ tracts21 <- get_acs(
   geometry = TRUE,
   output = "wide"
 )%>%
-  select(-NAME, -ends_with("M"))
+  select(-NAME, -ends_with("M")) %>%
+  rename(totalpop = B01003_001E,
+         med_income = B19013_001E,   # Median Household Income
+         med_rent = B25058_001E,   # Median Rent
+         owner_units = B25008_002E,   # Owner-Occupied Units
+        renter_units = B25008_003E,   # Renter-Occupied Units
+        same_house_75 = B07001_032E,   # Same House 75 Years Ago
+        same_house_1 = B07001_017E,   # Same House 1 Year Ago
+        monthly_costs_no_mortgage = B25088_003E,   # Median Selected Monthly Owner Costs (homes without a mortgage)
+        monthly_costs_with_mortgage = B25088_002E,   # Median Selected Monthly Owner Costs (homes with a mortgage)
+        med_gross_rent = B25064_001E,   # Median Gross Rent (rent and utilities)
+        housing_units_with_heat = B25117_001E,   # Percentage of Housing Units with heat
+        edu_bachelors = B15003_022E,   # Educational Attainment: Bachelor's Degree
+        pop_below_poverty = B17001_002E,   # Percentage of Population Below the Poverty Level
+        housing_units_high_speed_internet = B28002_004E,   # Percentage of Housing Units with High-Speed Internet
+        housing_units_no_vehicle = B25044_003E,   # Percentage of Housing Units with No Vehicle Available
+        race_white = B02001_002E,   # Race and Ethnicity: White Alone
+        race_black = B02001_003E,   # Race and Ethnicity: Black or African American Alone
+        hispanic_latino = B03001_003E 
+         )
 
 # Transform the data to ESRI:102728 projection
 tracts21 <- tracts21 %>% st_transform(st_crs(data))
@@ -140,21 +159,65 @@ tracts21 <- tracts21 %>% st_transform(st_crs(data))
 
 ## Open Data philly 
 
-private schools proximity, parks 
+private schools proximity, parks and landmarks, floodplains, daily arrests, litter score, heat index
 
-```{r}
+philly rising boundaries? 
+
+```{r results= 'hide'}
 PhillySchools <-
-   st_read("D:/Fall_2023/PPA/Midterm/data/Schools.geojson") %>%
+   st_read("./data/Schools.geojson") %>%
   filter(TYPE_SPECIFIC == "PRIVATE") %>%
   st_transform(st_crs(tracts21))
+
+#schools 
+
+nearest_fts <- sf::st_nearest_feature(data, PhillySchools)
+
+# convert to rsgeo geometries
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillySchools)
+
+# calculate distance
+data$dist_to_pvt_schools <- rsgeo::distance_euclidean_pairwise(x, y[nearest_fts])
+
+#landmarks 
 
 PhillyLandmarks <-
  st_read("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Landmark_Points/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson")%>%
   st_transform(st_crs(tracts21))
 
 PhillyComCorr <-
-  st_read("D:/Fall_2023/PPA/Midterm/data/Commercial_Corridors.geojson") %>%
+  st_read("./data/Commercial_Corridors.geojson") %>%
   st_transform(st_crs(tracts21))
+
+#is it within the commerical corridor?
+
+data$within_com_corr <- ifelse(st_within(data, PhillyComCorr), 1, 0)
+
+data <- data %>%
+  mutate(within_com_corr = ifelse(is.na(within_com_corr), 0, 1))
+
+
+PhillyLitter <-
+  st_read("./data/Litter_Index.geojson") %>%
+  st_transform(st_crs(tracts21))
+
+#joining the litter score
+
+data <- 
+ st_join(data,(PhillyLitter %>%
+          select(-OBJECTID, -Shape__Area, -Shape__Length )%>%
+          rename(litter = SCORE))) 
+
+PhillyFlood <- 
+  st_read("./data/FEMA_100_flood_Plain.geojson") %>%
+  st_transform(st_crs(tracts21))
+
+#is it within the floodplain?
+data$within_flood <- ifelse(st_within(data, PhillyFlood), 1, 0)
+
+data <- data %>%
+  mutate(within_flood = ifelse(is.na(within_flood), 0, 1))
   
 ```
 
@@ -184,39 +247,43 @@ ggplot() +
 
 
 ```{r}
+
+#test plot 
+
 ggplot() +
   geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
   geom_sf(data = PhillySchools, aes(colour = "red")) +
   mapTheme()
 ```
+```{r}
+#test plot 
 
-## Buffering the landmarks and achools to the homes sold
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
+  geom_sf(data = PhillyComCorr, aes(colour = "lightblue")) +
+  mapTheme()
+
+```
+
+
+## Distance from schools to the homes sold
+
+
+
+
+
+
 
 ```{r}
 
-#schools 
+# joining census data
 
-nearest_fts <- sf::st_nearest_feature(data, PhillySchools)
+data <- 
+  st_join(data, tracts21)
 
-# convert to rsgeo geometries
-x <- rsgeo::as_rsgeo(data)
-y <- rsgeo::as_rsgeo(PhillySchools)
+```
 
-# calculate distance
-data$dist_to_pvt_schools <- rsgeo::distance_euclidean_pairwise(x, y[nearest_fts])
-
-#commercial corridors
-
-nearest_fts <- sf::st_nearest_feature(data, PhillyComCorr)
-
-# convert to rsgeo geometries
-x <- rsgeo::as_rsgeo(data)
-y <- rsgeo::as_rsgeo(PhillyComCorr)
-
-# calculate distance
-data$dist_to_com_corr <- rsgeo::distance_euclidean_pairwise(x, y[nearest_fts])
-
-
+```{r}
 
 ```
 
@@ -224,7 +291,7 @@ data$dist_to_com_corr <- rsgeo::distance_euclidean_pairwise(x, y[nearest_fts])
 ```{r}
 numericVars <- data %>%
   st_drop_geometry(data) %>%
-  select(dist_to_com_corr, sale_price, dist_to_pvt_schools, number_of_bathrooms, number_of_bedrooms)%>%
+  select(sale_price,dist_to_com_corr, dist_to_pvt_schools, number_of_bathrooms, number_of_bedrooms, med_income, within_flood, litter, within_com_corr, race_white, race_black, total_area, total_livable_area )%>%
   na.omit()
 
 ggcorrplot(
@@ -235,4 +302,21 @@ ggcorrplot(
   insig = "blank") +  
     labs(title = "Correlation across numeric variables") 
 ```
+
+
+
+```{r}
+
+#plotting the correlations 
+
+st_drop_geometry(data) %>% 
+  dplyr::select(sale_price, med_income, dist_to_pvt_schools, total_area) %>%
+  gather(Variable, Value, -sale_price) %>% 
+   ggplot(aes(Value, sale_price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     labs(title = "Price as a function of continuous variables") +
+     plotTheme()
+```
+
 
