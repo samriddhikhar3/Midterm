@@ -15,7 +15,7 @@ output:
 
 Philly is sooooo... hosuing prediction....  
 
-<img src="D:/Fall_2023/PPA/Midterm/images/33rd-Street-Corner-of-West-Lehigh-Ave.jpg" width="400" align="right" style="display: inline; margin: 0 10px;"/>
+<img src="./images/33rd-Street-Corner-of-West-Lehigh-Ave.jpg" width="400" align="right" style="display: inline; margin: 0 10px;"/>
 
 This code is built upon the classwork discussed [here](https://github.com/mafichman/musa_5080_2023/tree/main).
 
@@ -74,10 +74,10 @@ Data provided was cleaned and new variable were created
 
 ```{r results= 'hide'}
 data <- 
-  st_read("D:/Fall_2023/PPA/Midterm/data/studentData.geojson") %>%
+  st_read("./data/studentData.geojson") %>%
   st_transform('ESRI:102286')
 
-data <-  data %>%
+data <-  data %>% 
   select(-cross_reference, -date_exterior_condition, -mailing_address_2, -mailing_care_of, -unfinished, -utility )
 ```
 
@@ -266,13 +266,7 @@ ggplot() +
 ```
 
 
-## Distance from schools to the homes sold
-
-
-
-
-
-
+## title
 
 ```{r}
 
