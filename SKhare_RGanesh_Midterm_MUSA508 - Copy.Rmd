@@ -1,0 +1,468 @@
+---
+title: "Predicting Housing Prices in Philadelphia, PA"
+author: "Samriddhi Khare, Roshini Ganesh"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    code_download: true
+    theme: journal  
+---
+
+# Introduction
+
+Philly is sooooo... hosuing prediction....  
+
+<img src="./images/33rd-Street-Corner-of-West-Lehigh-Ave.jpg" width="400" align="right" style="display: inline; margin: 0 10px;"/>
+
+This code is built upon the classwork discussed [here](https://github.com/mafichman/musa_5080_2023/tree/main).
+
+```{r setup, include=FALSE}
+  knitr::opts_chunk$set(
+    echo = TRUE,
+    warning = FALSE,
+    message = FALSE,
+    out.width = '100%',
+    fig.retina =3
+  )
+```
+
+## R Setup and Installing Packages
+
+This code chunk handles the essential tasks of loading necessary packages, configuring the Census API key, defining class functions, specifying a color palette, and managing global environment settings.
+
+```{r setup_packages, warning = FALSE, message = FALSE}
+
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(kableExtra)
+library(tidyr)
+library(ggplot2)
+library(viridis)
+library(stringr)
+library(tigris)
+library(ggcorrplot)
+library(stargazer)
+library(caTools)
+library(spdep)
+
+
+options(scipen=999)
+options(tigris_class = "sf")
+
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+palettea <- c("#EA526F","#E76B74","#D7AF70","#937D64","#585B56")
+
+paletteb <- c("#f7b267", "#f79d65", "#f4845f", "#f27059", "#f25c54")
+
+palettec <- c("#fde725","#5ec962","#21918c","#3b528b","#440154")
+
+paletted <- c("#ffd700","#ffb14e","#ea5f94","#9d02d7","#0000ff")
+
+palettee <- c('#d7191c','#fdae61','#ffffbf','#abd9e9','#2c7bb6')
+
+
+census_api_key('bf2d507651b5a621dbadd44533fb4f3deaab26bf', overwrite = TRUE)
+
+```
+
+## Loading Data
+
+Data sources used include census and opendata philly 
+
+Data provided was cleaned and new variable were created 
+
+```{r results= 'hide'}
+data <- 
+  st_read("./data/studentData.geojson") %>%
+  st_transform('ESRI:102286')
+
+data <-  data %>% 
+  select(-cross_reference, -date_exterior_condition, -mailing_address_2, -mailing_care_of, -unfinished, -utility )
+```
+
+## Census Data
+
+The years chosen for analysis are 2021 because covid recovery most recent to mkae more acccurate predicitons
+
+
+The variables chosen for this analysis include: 
+
+1. income because - 
+
+2. 
+
+3. 
+
+
+```{r census, cache=TRUE, results= 'hide'}
+
+acs_variable_list.2021 <- load_variables(2021, #year
+                                         "acs5", #five year ACS estimates
+                                         cache = TRUE)
+# 2021, A
+
+# Retrieve ACS data for Philadelphia tracts in 2020
+tracts21 <- get_acs(
+  geography = "tract",
+  variables = c(
+    "B01003_001",   # Total Population
+    "B19013_001",   # Median Household Income
+    "B25058_001",   # Median Rent
+    "B25008_002",   # Owner-Occupied Units
+    "B25008_003",   # Renter-Occupied Units
+    "B07001_032",   # Same House 75 Years Ago
+    "B07001_017",   # Same House 1 Year Ago
+    "B25088_003",   # Median Selected Monthly Owner Costs (homes without a mortgage)
+    "B25088_002",   # Median Selected Monthly Owner Costs (homes with a mortgage)
+    "B25064_001",   # Median Gross Rent (rent and utilities)
+    "B25117_001",   # Percentage of Housing Units with heat
+    "B15003_022",   # Educational Attainment: Bachelor's Degree
+    "B17001_002",   # Percentage of Population Below the Poverty Level
+    "B28002_004",   # Percentage of Housing Units with High-Speed Internet
+    "B25044_003",   # Percentage of Housing Units with No Vehicle Available
+    "B02001_002",   # Race and Ethnicity: White Alone
+    "B02001_003",   # Race and Ethnicity: Black or African American Alone
+    "B03001_003"   # Hispanic or Latino Origin of Population
+  ),
+  year = 2021,
+  state = "PA",
+  county = "Philadelphia",
+  geometry = TRUE,
+  output = "wide"
+)%>%
+  select(-NAME, -ends_with("M")) %>%
+  rename(totalpop = B01003_001E,
+         med_income = B19013_001E,   # Median Household Income
+         med_rent = B25058_001E,   # Median Rent
+         owner_units = B25008_002E,   # Owner-Occupied Units
+        renter_units = B25008_003E,   # Renter-Occupied Units
+        same_house_75 = B07001_032E,   # Same House 75 Years Ago
+        same_house_1 = B07001_017E,   # Same House 1 Year Ago
+        monthly_costs_no_mortgage = B25088_003E,   # Median Selected Monthly Owner Costs (homes without a mortgage)
+        monthly_costs_with_mortgage = B25088_002E,   # Median Selected Monthly Owner Costs (homes with a mortgage)
+        med_gross_rent = B25064_001E,   # Median Gross Rent (rent and utilities)
+        housing_units_with_heat = B25117_001E,   # Percentage of Housing Units with heat
+        edu_bachelors = B15003_022E,   # Educational Attainment: Bachelor's Degree
+        pop_below_poverty = B17001_002E,   # Percentage of Population Below the Poverty Level
+        housing_units_high_speed_internet = B28002_004E,   # Percentage of Housing Units with High-Speed Internet
+        housing_units_no_vehicle = B25044_003E,   # Percentage of Housing Units with No Vehicle Available
+        race_white = B02001_002E,   # Race and Ethnicity: White Alone
+        race_black = B02001_003E,   # Race and Ethnicity: Black or African American Alone
+        hispanic_latino = B03001_003E 
+         )
+
+# Transform the data to ESRI:102728 projection
+tracts21 <- tracts21 %>% st_transform(st_crs(data))
+
+```
+
+## Open Data philly 
+
+private schools proximity, parks and landmarks, floodplains, daily arrests, litter score, heat index
+
+philly rising boundaries? 
+
+```{r results= 'hide'}
+PhillySchools <-
+   st_read("./data/Schools.geojson") %>%
+  filter(TYPE_SPECIFIC == "PRIVATE") %>%
+  st_transform(st_crs(tracts21))
+
+#schools 
+
+nearest_fts <- sf::st_nearest_feature(data, PhillySchools)
+
+# convert to rsgeo geometries
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillySchools)
+
+# calculate distance
+data$dist_to_pvt_schools <- rsgeo::distance_euclidean_pairwise(x, y[nearest_fts])
+
+#landmarks 
+
+PhillyLandmarks <-
+ st_read("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Landmark_Points/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson")%>%
+  st_transform(st_crs(tracts21))
+
+PhillyComCorr <-
+  st_read("./data/Commercial_Corridors.geojson") %>%
+  st_transform(st_crs(tracts21))
+
+#is it within the commerical corridor?
+
+data$within_com_corr <- ifelse(st_within(data, PhillyComCorr), 1, 0)
+
+data <- data %>%
+  mutate(within_com_corr = ifelse(is.na(within_com_corr), 0, 1))
+
+
+PhillyLitter <-
+  st_read("./data/Litter_Index.geojson") %>%
+  st_transform(st_crs(tracts21))
+
+#joining the litter score
+
+data <- 
+ st_join(data,(PhillyLitter %>%
+          select(-OBJECTID, -Shape__Area, -Shape__Length )%>%
+          rename(litter = SCORE))) 
+
+PhillyFlood <- 
+  st_read("./data/FEMA_100_flood_Plain.geojson") %>%
+  st_transform(st_crs(tracts21))
+
+#is it within the floodplain?
+data$within_flood <- ifelse(st_within(data, PhillyFlood), 1, 0)
+
+data <- data %>%
+  mutate(within_flood = ifelse(is.na(within_flood), 0, 1))
+  
+```
+
+
+
+# Exploratory Analysis
+
+
+```{r}
+#mapping sale price
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile\nBreaks", 
+                   na.value = NA) +
+  labs(title="Properties by Sale Price", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 1") +
+  mapTheme()
+
+```
+
+## Visualizing Private Schools and Landmarks 
+
+
+```{r}
+
+#test plot 
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
+  geom_sf(data = PhillySchools, aes(colour = "red")) +
+  mapTheme()
+```
+```{r}
+#test plot 
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
+  geom_sf(data = PhillyComCorr, aes(colour = "lightblue")) +
+  mapTheme()
+
+```
+
+
+## title
+
+```{r}
+
+# joining census data
+
+data <- 
+  st_join(data, tracts21)
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+#plotting the correlations 
+
+st_drop_geometry(data) %>% 
+  dplyr::select(sale_price, med_income, dist_to_pvt_schools, total_area) %>%
+  gather(Variable, Value, -sale_price) %>% 
+   ggplot(aes(Value, sale_price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     labs(title = "Price as a function of continuous variables") +
+     plotTheme()
+```
+
+```{r}
+
+variables <- c(
+  "sale_price", "dist_to_pvt_schools", "number_of_bathrooms",
+  "number_of_bedrooms", "med_income", "within_flood",
+  "within_com_corr", "race_white", "race_black",
+  "total_area", "total_livable_area"
+)
+
+numericVars <- data %>%
+  st_drop_geometry(data) %>%
+  select(variables)%>%
+  na.omit()
+
+ggcorrplot(
+  round(cor(numericVars), 1), 
+  p.mat = cor_pmat(numericVars),
+  colors = c('#d7191c','#ffffbf','#2c7bb6'),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across numeric variables") 
+```
+
+# Regressions
+
+```{r}
+
+#not sure if all this is needed
+
+#here we do it with the complete dataset for some reason? 
+
+reg1 <- lm(sale_price ~ ., data = st_drop_geometry(data) %>%  
+             #dplyr::filter(toPredict == "MODELLING") %>%
+                                 dplyr::select(variables))
+
+summary(reg1)
+
+# pretty regression
+
+print(stargazer(reg1, type="text", digits=1, title="Linear Model of Training Dataset (Figure 5)", out = "Training LM.txt"))
+
+```
+
+```{r}
+
+
+## Creating the training and test set
+modelling_data <- data %>% filter(toPredict == "MODELLING")
+
+set.seed(999) #makes sure data is split same way every time
+
+## Splitting the data
+split <- sample.split(modelling_data$objectid, SplitRatio = 0.75)
+
+## Creating the training and test sets
+train_data <- modelling_data[split,]
+test_data <- modelling_data[!split,]
+```
+
+```{r}
+
+#regression on training data
+
+reg2 <- lm(sale_price ~ ., data = st_drop_geometry(train_data) %>%  
+                                 dplyr::select(variables))
+
+## Plot regression (didnt work)
+# effect_plot(reg2, pred = total_livable_area, interval = TRUE, plot.points = TRUE)
+
+
+test_data <-
+  test_data %>%
+  mutate(Price.Predict = predict(reg2, test_data),
+         Price.Error = Price.Predict - sale_price,
+         Price.AbsError = abs(Price.Predict - sale_price),
+         Price.APE = (abs(Price.Predict - sale_price)) / Price.Predict)
+
+```
+
+```{r}
+# table of MAE and MAPE
+
+## Accuracy - Mean Absolute Error
+MAE <- data.frame(mean(test_data$Price.AbsError, na.rm = T))
+MAPE <- data.frame(mean(test_data$Price.APE, na.rm = T)) #MAPE
+
+reg.MAE.MAPE <- 
+  cbind(MAE, MAPE) %>%
+  kable(caption = "Regression MAE & MAPE (Figure 5.1)") %>%
+  kable_styling("striped",full_width = F) 
+
+reg.MAE.MAPE
+
+```
+
+
+```{r}
+
+test_data <-
+  test_data %>%
+  filter(sale_price < 10000000)
+
+
+## K-Fold: Generalizability Cross-Validation
+fitControl <- trainControl(method = "cv", number = 100)
+set.seed(369)
+
+reg.cv <- 
+  train(sale_price ~ ., data = st_drop_geometry(test_data) %>% 
+                                dplyr::select(variables),
+method = "lm", trControl = fitControl, na.action = na.pass)
+
+#This needs to be work-shopped. It stopped working and I don't know why. The code without an object assigned also outputs.
+
+reg.cv$resample[1:5,]
+
+mean(reg.cv$resample[,3])
+
+reg.cv$resample[7,]
+
+
+stargazer(as.data.frame(reg.cv$resample), type="text", digits=1, title="Cross Validation Results (5.2)", out = "CV.txt") #all cv
+
+```
+
+```{r}
+#plotting the cross validation stuff
+
+ggplot(reg.cv$resample, aes(x=MAE)) +
+  geom_histogram(fill = "blue") +
+  labs(title = "Cross Validation Tests in Mean Average Error", caption="Figure 5.3") +
+  plotTheme()
+
+```
+```{r}
+# Spatial Lag
+coords <- st_coordinates(train_data) 
+neighborList <- knn2nb(knearneigh(coords, 5))
+spatialWeights <- nb2listw(neighborList, style="W")
+train_data$lagPrice <- lag.listw(spatialWeights, train_data$sale_price)
+
+# On Errors
+coords.test <-  st_coordinates(test_data) 
+neighborList.test <- knn2nb(knearneigh(coords.test, 5))
+spatialWeights.test <- nb2listw(neighborList.test, style="W")
+
+# On Test 
+test_data <- test_data %>%
+  mutate(lagPriceError = lag.listw(spatialWeights.test, Price.Error, NAOK = TRUE))
+
+test_data_filter <- test_data %>%
+  filter(Price.Error > 0, lagPriceError > 0)
+
+
+ggplot(data = test_data_filter, aes(lagPriceError, Price.Error)) +
+  geom_point(size = .85,colour = "black") + 
+  geom_smooth(method = "lm",colour = "red",size = 1.2) +
+  labs(title="Price Errors",
+       caption = "Figure 6.1") +
+  plotTheme()
+## `geom_smooth()` using formula 'y ~ x'
+
+```
+

@@ -87,7 +87,7 @@ Data provided was cleaned and new variable were created
 # Reading Data
 
 data <- 
-  st_read("./data/studentData.geojson") %>%
+  st_read("C:/Users/user/Documents/GitHub/Midterm/studentData.geojson") %>%
   st_transform('ESRI:102286')
 
 # Dropping columns with no values and filtering values within Philadelphia
@@ -379,7 +379,6 @@ data <- data %>%
 ```
 
 
-
 ## Census Data
 
 The years chosen for analysis are 2021 because covid recovery most recent to mkae more acccurate predicitons
@@ -394,14 +393,17 @@ The variables chosen for this analysis include:
 3. 
 
 
-```{r census, cache=TRUE, results= 'hide'}
+```{r Reading_Census_2021, cache=TRUE, results= 'hide'}
+
+# Retrieving variables from ACS data for year 2021
 
 acs_variable_list.2021 <- load_variables(2021, #year
                                          "acs5", #five year ACS estimates
                                          cache = TRUE)
-# 2021, A
 
-# Retrieve ACS data for Philadelphia tracts in 2020
+
+# Retrieve ACS data for Philadelphia tracts in 2021
+
 tracts21 <- get_acs(
   geography = "tract",
   variables = c(
@@ -422,7 +424,7 @@ tracts21 <- get_acs(
     "B25044_003",   # Percentage of Housing Units with No Vehicle Available
     "B02001_002",   # Race and Ethnicity: White Alone
     "B02001_003",   # Race and Ethnicity: Black or African American Alone
-    "B03001_003"   # Hispanic or Latino Origin of Population
+    "B03001_003"    # Hispanic or Latino Origin of Population
   ),
   year = 2021,
   state = "PA",
@@ -431,27 +433,28 @@ tracts21 <- get_acs(
   output = "wide"
 )%>%
   select(-NAME, -ends_with("M")) %>%
-  rename(totalpop = B01003_001E,
-         med_income = B19013_001E,   # Median Household Income
-         med_rent = B25058_001E,   # Median Rent
-         owner_units = B25008_002E,   # Owner-Occupied Units
-        renter_units = B25008_003E,   # Renter-Occupied Units
-        same_house_75 = B07001_032E,   # Same House 75 Years Ago
-        same_house_1 = B07001_017E,   # Same House 1 Year Ago
-        monthly_costs_no_mortgage = B25088_003E,   # Median Selected Monthly Owner Costs (homes without a mortgage)
-        monthly_costs_with_mortgage = B25088_002E,   # Median Selected Monthly Owner Costs (homes with a mortgage)
-        med_gross_rent = B25064_001E,   # Median Gross Rent (rent and utilities)
-        housing_units_with_heat = B25117_001E,   # Percentage of Housing Units with heat
-        edu_bachelors = B15003_022E,   # Educational Attainment: Bachelor's Degree
-        pop_below_poverty = B17001_002E,   # Percentage of Population Below the Poverty Level
+  rename(totalpop = B01003_001E,                           # Total Population
+         med_income = B19013_001E,                         # Median Household Income
+         med_rent = B25058_001E,                           # Median Rent
+         owner_units = B25008_002E,                        # Owner-Occupied Units
+        renter_units = B25008_003E,                        # Renter-Occupied Units
+        same_house_75 = B07001_032E,                       # Same House 75 Years Ago
+        same_house_1 = B07001_017E,                        # Same House 1 Year Ago
+        monthly_costs_no_mortgage = B25088_003E,           # Median Selected Monthly Owner Costs (homes without a mortgage)
+        monthly_costs_with_mortgage = B25088_002E,         # Median Selected Monthly Owner Costs (homes with a mortgage)
+        med_gross_rent = B25064_001E,                      # Median Gross Rent (rent and utilities)
+        housing_units_with_heat = B25117_001E,             # Percentage of Housing Units with heat
+        edu_bachelors = B15003_022E,                       # Educational Attainment: Bachelor's Degree
+        pop_below_poverty = B17001_002E,                   # Percentage of Population Below the Poverty Level
         housing_units_high_speed_internet = B28002_004E,   # Percentage of Housing Units with High-Speed Internet
-        housing_units_no_vehicle = B25044_003E,   # Percentage of Housing Units with No Vehicle Available
-        race_white = B02001_002E,   # Race and Ethnicity: White Alone
-        race_black = B02001_003E,   # Race and Ethnicity: Black or African American Alone
-        hispanic_latino = B03001_003E 
+        housing_units_no_vehicle = B25044_003E,            # Percentage of Housing Units with No Vehicle Available
+        race_white = B02001_002E,                          # Race and Ethnicity: White Alone
+        race_black = B02001_003E,                          # Race and Ethnicity: Black or African American Alone
+        hispanic_latino = B03001_003E                      # Race and Ethnicity: Hispanic or Latino
          )
 
 # Transform the data to ESRI:102728 projection
+
 tracts21 <- tracts21 %>% st_transform(st_crs(data))
 
 ```
@@ -462,57 +465,68 @@ private schools proximity, parks and landmarks, floodplains, daily arrests, litt
 
 philly rising boundaries? 
 
-```{r results= 'hide'}
+```{r Open_Data_Philly, results= 'hide'}
+
+# Reading data about schools in Philadelphia
+
 PhillySchools <-
    st_read("./data/Schools.geojson") %>%
   filter(TYPE_SPECIFIC == "PRIVATE") %>%
   st_transform(st_crs(tracts21))
 
-#schools 
+# Finding nearest schools 
 
 nearest_fts <- sf::st_nearest_feature(data, PhillySchools)
 
-# convert to rsgeo geometries
+# Converting to rsgeo geometries
+
 x <- rsgeo::as_rsgeo(data)
 y <- rsgeo::as_rsgeo(PhillySchools)
 
-# calculate distance
+# Calculating distance to private schools
+
 data$dist_to_pvt_schools <- rsgeo::distance_euclidean_pairwise(x, y[nearest_fts])
 
-#landmarks 
+# Reading data about Landmarks in Philadelphia
 
 PhillyLandmarks <-
  st_read("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Landmark_Points/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson")%>%
   st_transform(st_crs(tracts21))
 
+# Reading data about Commercial Corridors in Philadelphia
+
 PhillyComCorr <-
   st_read("./data/Commercial_Corridors.geojson") %>%
   st_transform(st_crs(tracts21))
 
-#is it within the commerical corridor?
+# Are the analyzed houses within a commerical corridor?
 
 data$within_com_corr <- ifelse(st_within(data, PhillyComCorr), 1, 0)
 
 data <- data %>%
   mutate(within_com_corr = ifelse(is.na(within_com_corr), 0, 1))
 
+# Reading data about Litter Index in Philadelphia
 
 PhillyLitter <-
   st_read("./data/Litter_Index.geojson") %>%
   st_transform(st_crs(tracts21))
 
-#joining the litter score
+# Joining the litter score to the data frame
 
 data <- 
  st_join(data,(PhillyLitter %>%
           select(-OBJECTID, -Shape__Area, -Shape__Length )%>%
           rename(litter = SCORE))) 
 
+# Reading data about Philadelphia Flood Plains
+
 PhillyFlood <- 
   st_read("./data/FEMA_100_flood_Plain.geojson") %>%
   st_transform(st_crs(tracts21))
 
-#is it within the floodplain?
+# Are the analyzed houses within a floodplain?
+
 data$within_flood <- ifelse(st_within(data, PhillyFlood), 1, 0)
 
 data <- data %>%
@@ -526,7 +540,8 @@ data <- data %>%
 
 
 ```{r}
-#mapping sale price
+
+# Mapping Sale Price
 
 ggplot() +
   geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
@@ -576,38 +591,15 @@ data <-
 
 ```
 
-
-
-
-
-
-
-
 ```{r}
 
-#plotting the correlations 
-
-st_drop_geometry(data) %>% 
-  dplyr::select(sale_price, med_income, dist_to_pvt_schools) %>%
-  gather(Variable, Value, -sale_price) %>% 
-   ggplot(aes(Value, sale_price)) +
-     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
-     facet_wrap(~Variable, ncol = 3, scales = "free") +
-     labs(title = "Price as a function of continuous variables") +
-     plotTheme()
 ```
 
+
 ```{r}
-
-variables <- c(
-  "sale_price", "dist_to_pvt_schools", "number_of_bathrooms",
-  "number_of_bedrooms", "med_income", "within_flood",
-  "within_com_corr", "race_white", "race_black", "total_livable_area"
-)
-
 numericVars <- data %>%
   st_drop_geometry(data) %>%
-  select(variables)%>%
+  select(sale_price, dist_to_com_corr, dist_to_pvt_schools, number_of_bathrooms, number_of_bedrooms, med_income, within_flood, litter, within_com_corr, race_white, race_black, total_area, total_livable_area )%>%
   na.omit()
 
 ggcorrplot(
@@ -619,244 +611,20 @@ ggcorrplot(
     labs(title = "Correlation across numeric variables") 
 ```
 
-# Regressions
-
-```{r}
-
-#not sure if all this is needed
-
-#here we do it with the complete dataset for some reason? 
-
-reg1 <- lm(sale_price ~ ., data = st_drop_geometry(data) %>%  
-             #dplyr::filter(toPredict == "MODELLING") %>%
-                                 dplyr::select(variables))
-
-summary(reg1)
-
-# pretty regression
-
-print(stargazer(reg1, type="text", digits=1, title="Linear Model of Training Dataset (Figure 5)", out = "Training LM.txt"))
-
-```
-
-```{r}
-
-
-## Creating the training and test set
-modelling_data <- data %>% filter(toPredict == "MODELLING")
-
-set.seed(999) #makes sure data is split same way every time
-
-## Splitting the data
-split <- sample.split(modelling_data$objectid, SplitRatio = 0.75)
-
-## Creating the training and test sets
-train_data <- modelling_data[split,]
-test_data <- modelling_data[!split,]
-```
-
-```{r}
-
-#regression on training data
-
-reg2 <- lm(sale_price ~ ., data = st_drop_geometry(train_data) %>%  
-                                 dplyr::select(variables))
-
-## Plot regression (didnt work)
-# effect_plot(reg2, pred = total_livable_area, interval = TRUE, plot.points = TRUE)
-
-
-test_data <-
-  test_data %>%
-  mutate(Price.Predict = predict(reg2, test_data),
-         Price.Error = Price.Predict - sale_price,
-         Price.AbsError = abs(Price.Predict - sale_price),
-         Price.APE = (abs(Price.Predict - sale_price)) / Price.Predict)
-
-```
-
-```{r}
-# table of MAE and MAPE
-
-## Accuracy - Mean Absolute Error
-MAE <- data.frame(mean(test_data$Price.AbsError, na.rm = T))
-MAPE <- data.frame(mean(test_data$Price.APE, na.rm = T)) #MAPE
-
-reg.MAE.MAPE <- 
-  cbind(MAE, MAPE) %>%
-  kable(caption = "Regression MAE & MAPE (Figure 5.1)") %>%
-  kable_styling("striped",full_width = F) 
-
-reg.MAE.MAPE
-
-```
 
 
 ```{r}
 
-test_data <-
-  test_data %>%
-  filter(sale_price < 10000000)
+#plotting the correlations 
 
-
-## K-Fold: Generalizability Cross-Validation
-fitControl <- trainControl(method = "cv", number = 100)
-set.seed(369)
-
-reg.cv <- 
-  train(sale_price ~ ., data = st_drop_geometry(test_data) %>% 
-                                dplyr::select(variables),
-method = "lm", trControl = fitControl, na.action = na.pass)
-
-#This needs to be work-shopped. It stopped working and I don't know why. The code without an object assigned also outputs.
-
-reg.cv$resample[1:5,]
-
-mean(reg.cv$resample[,3])
-
-reg.cv$resample[7,]
-
-
-stargazer(as.data.frame(reg.cv$resample), type="text", digits=1, title="Cross Validation Results (5.2)", out = "CV.txt") #all cv
-
-```
-
-```{r}
-#plotting the cross validation stuff
-
-ggplot(reg.cv$resample, aes(x=MAE)) +
-  geom_histogram(fill = "blue") +
-  labs(title = "Cross Validation Tests in Mean Average Error", caption="Figure 5.3") +
-  plotTheme()
-
-```
-```{r}
-# Spatial Lag
-coords <- st_coordinates(train_data) 
-neighborList <- knn2nb(knearneigh(coords, 5))
-spatialWeights <- nb2listw(neighborList, style="W", zero.policy = TRUE)
-train_data$lagPrice <- lag.listw(spatialWeights, train_data$sale_price)
-
-# On Errors
-coords.test <-  st_coordinates(test_data) 
-neighborList.test <- knn2nb(knearneigh(coords.test, 5))
-spatialWeights.test <- nb2listw(neighborList.test, style="W")
-
-# On Test 
-test_data <- test_data %>%
-  mutate(lagPriceError = lag.listw(spatialWeights.test, Price.Error, NAOK = TRUE))
-
-test_data_filter <- test_data %>%
-  filter(Price.Error > 0, lagPriceError > 0)
-
-
-ggplot(data = test_data_filter, aes(lagPriceError, Price.Error)) +
-  geom_point(size = .85,colour = "black") + 
-  geom_smooth(method = "lm",colour = "red",size = 1.2) +
-  labs(title="Price Errors",
-       caption = "Figure 6.1") +
-  plotTheme()
-
-```
-
-```{r}
-
-
-test_data %>%
-  dplyr::select(Price.Predict, sale_price) %>%
-    ggplot(aes(sale_price, Price.Predict)) +
-  geom_point() +
-  stat_smooth(aes(sale_price, sale_price), 
-             method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
-  stat_smooth(aes(Price.Predict, sale_price), 
-              method = "lm", se = FALSE, size = 1, colour="#25CB10") +
-  labs(title="Predicted Sale Price as a Function of Observed Price",
-       subtitle="Orange line represents a perfect prediction; Green line represents prediction",
-       caption = "Figure 6.2") +
-  plotTheme()
-```
-```{r}
-# Moran's I
-
-moranTest <- moran.mc(na.omit(test_data_filter$Price.Error),
-                      spatialWeights, nsim = 999)  
-
-ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
-  geom_histogram(binwidth = 0.01) +
-  geom_vline(aes(xintercept = moranTest$statistic), colour = "#FA7800",size=1) +
-  scale_x_continuous(limits = c(-1, 1)) +
-  labs(title="Observed and permuted Moran's I",
-       subtitle= "Observed Moran's I in orange",
-       caption = "Figure 6.3",
-       x="Moran's I",
-       y="Count") +
-  plotTheme()
-```
-
-
-```{r}
-ggplot() +
-  geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
-  geom_sf(data = test_data, aes(colour = q5(Price.AbsError)), 
-          show.legend = "point", size = .75) +
-  scale_colour_manual(values = palettee,
-                   labels=qBr(test_data,"Price.AbsError"),
-                   name="Quintile\nBreaks") +
-  labs(title="Map of Price Absolute Errors, Boulder CO, 2019-2021", 
-      caption="Figure 6.4") +
-  mapTheme()
-```
-
-```{r}
-ggplot() +
-  geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
-  geom_sf(data = test_data, aes(colour = q5(Price.AbsError)), 
-          show.legend = "point", size = .75) +
-  scale_colour_manual(values = palettee,
-                   labels=qBr(test_data,"Price.Predict"),
-                   name="Quintile\nBreaks") +
-  labs(title="predicted sale price", 
-      caption="Figure 6.4") +
-  mapTheme()
-```
-```{r}
-st_drop_geometry(test_data) %>%
-  group_by(census_tract) %>%
-  summarize(MAPE = mean(Price.APE, na.rm = T)) %>%
-  ungroup() %>% 
-  cross_join( tracts21)%>%
-    st_sf() %>%
-    ggplot() + 
-   geom_sf(aes(fill = MAPE)) +
-      scale_fill_gradient(low = palettee[5], high = palettee[1],
-                          name = "MAPE") +
-  geom_sf(data = test_data, colour = "black", show.legend = "point", size = .5) +
-      labs(title = "Mean test set MAPE by Block Groups",
-           caption = "Figure 7.3") +
-      mapTheme()
-
-```
-```{r}
-
-test_data <-
-  test_data %>%
-  group_by(census_tract) %>%
-  mutate(MeanPrice = mean(sale_price))
-
-test_data <-
-  test_data %>%
-  group_by(census_tract) %>%
-  mutate(MAPE = mean(Price.APE)) 
-
-#This now seems correct versus the old version - woo! 
-
-ggplot(test_data) +
-  geom_point(aes(MeanPrice, MAPE)) +
-  geom_smooth(method = "lm", aes(MeanPrice, MAPE), se = FALSE, colour = "green") +
-  labs(title = "MAPE by Block Group as a function of mean price by Block Group",
-       x = "Mean Home Price", y = "MAPE",
-       caption = "Figure 7.5") +
-  plotTheme()
+st_drop_geometry(data) %>% 
+  dplyr::select(sale_price, med_income, dist_to_pvt_schools, total_area) %>%
+  gather(Variable, Value, -sale_price) %>% 
+   ggplot(aes(Value, sale_price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     labs(title = "Price as a function of continuous variables") +
+     plotTheme()
 ```
 
 

@@ -1,0 +1,45 @@
+
+Linear Model of Training Dataset (Figure 5)
+===============================================
+                        Dependent variable:    
+                    ---------------------------
+                            sale_price         
+-----------------------------------------------
+dist_to_pvt_schools          -28.4***          
+                               (2.1)           
+                                               
+number_of_bathrooms         85,844.1***        
+                             (2,478.1)         
+                                               
+number_of_bedrooms         -17,312.2***        
+                             (1,776.0)         
+                                               
+med_income                    2.6***           
+                              (0.05)           
+                                               
+within_flood               145,085.7***        
+                            (17,619.4)         
+                                               
+within_com_corr             98,222.7***        
+                             (4,448.0)         
+                                               
+race_white                     1.8*            
+                               (1.0)           
+                                               
+race_black                   -16.5***          
+                               (0.9)           
+                                               
+total_livable_area           197.6***          
+                               (2.5)           
+                                               
+Constant                   -150,358.3***       
+                             (6,933.3)         
+                                               
+-----------------------------------------------
+Observations                  18,693           
+R2                              0.6            
+Adjusted R2                     0.6            
+Residual Std. Error   152,638.6 (df = 18683)   
+F Statistic         3,365.5*** (df = 9; 18683) 
+===============================================
+Note:               *p<0.1; **p<0.05; ***p<0.01
