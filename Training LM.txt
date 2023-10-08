@@ -1,45 +1,75 @@
 
 Linear Model of Training Dataset (Figure 5)
-===============================================
-                        Dependent variable:    
-                    ---------------------------
-                            sale_price         
------------------------------------------------
-dist_to_pvt_schools          -28.4***          
-                               (2.1)           
-                                               
-number_of_bathrooms         85,844.1***        
-                             (2,478.1)         
-                                               
-number_of_bedrooms         -17,312.2***        
-                             (1,776.0)         
-                                               
-med_income                    2.6***           
-                              (0.05)           
-                                               
-within_flood               145,085.7***        
-                            (17,619.4)         
-                                               
-within_com_corr             98,222.7***        
-                             (4,448.0)         
-                                               
-race_white                     1.8*            
-                               (1.0)           
-                                               
-race_black                   -16.5***          
-                               (0.9)           
-                                               
-total_livable_area           197.6***          
-                               (2.5)           
-                                               
-Constant                   -150,358.3***       
-                             (6,933.3)         
-                                               
------------------------------------------------
-Observations                  18,693           
-R2                              0.6            
-Adjusted R2                     0.6            
-Residual Std. Error   152,638.6 (df = 18683)   
-F Statistic         3,365.5*** (df = 9; 18683) 
-===============================================
-Note:               *p<0.1; **p<0.05; ***p<0.01
+======================================================
+                               Dependent variable:    
+                           ---------------------------
+                                   sale_price         
+------------------------------------------------------
+number_of_bathrooms                29,423.6***        
+                                    (1,875.5)         
+                                                      
+PricePerSqft                       1,322.1***         
+                                      (7.9)           
+                                                      
+dist_to_nearest_pvt_school            2.9**           
+                                      (1.3)           
+                                                      
+dist_to_comm_corr                     -5.8            
+                                      (3.6)           
+                                                      
+dist_to_nearest_station               -0.3            
+                                      (0.4)           
+                                                      
+dist_to_nearest_trail                 -0.2            
+                                      (0.7)           
+                                                      
+med_income                           0.2***           
+                                     (0.04)           
+                                                      
+dist_to_nearest_pool                  -0.3            
+                                      (1.2)           
+                                                      
+frontage                            -196.3***         
+                                     (34.6)           
+                                                      
+central_air                        -5,003.6***        
+                                    (1,678.0)         
+                                                      
+fireplaces                         24,039.6***        
+                                    (2,542.4)         
+                                                      
+BasementPresent                      1,253.8          
+                                    (1,483.1)         
+                                                      
+exterior_condition                 -1,861.8**         
+                                     (917.9)          
+                                                      
+PctWhite                            -266.7***         
+                                     (65.3)           
+                                                      
+PctBlack                            -266.0***         
+                                     (46.8)           
+                                                      
+total_livable_area                  244.2***          
+                                      (1.6)           
+                                                      
+BuildingAge                          -53.5**          
+                                     (25.6)           
+                                                      
+PctBachelors                        -428.7***         
+                                     (118.6)          
+                                                      
+PctPoverty                          529.1***          
+                                     (85.5)           
+                                                      
+Constant                          -334,365.3***       
+                                    (8,162.9)         
+                                                      
+------------------------------------------------------
+Observations                         17,810           
+R2                                     0.9            
+Adjusted R2                            0.9            
+Residual Std. Error           84,517.9 (df = 17790)   
+F Statistic                5,922.8*** (df = 19; 17790)
+======================================================
+Note:                      *p<0.1; **p<0.05; ***p<0.01

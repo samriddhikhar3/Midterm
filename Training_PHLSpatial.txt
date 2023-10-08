@@ -1,0 +1,12 @@
+
+Descriptive Statistics for Philadelphia Homes Spatial Variables (Figure 4.1)
+====================================================
+Statistic      N      Mean   St. Dev.  Min     Max  
+----------------------------------------------------
+PctWhite     18,046   44.1     30.6    0.0    95.7  
+PctBlack     18,046   35.7     33.2    0.0    98.9  
+PctHispanic  18,046   15.4     18.8    0.0    91.7  
+PctBachelors 18,046   14.1     10.0    0.0    42.3  
+PctPoverty   18,046   20.4     13.1    0.0    65.1  
+med_income   17,889 61,334.6 28,999.7 11,955 210,322
+----------------------------------------------------

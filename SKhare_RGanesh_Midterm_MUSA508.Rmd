@@ -48,6 +48,11 @@ library(stringr)
 library(tigris)
 library(ggcorrplot)
 library(stargazer)
+library(dplyr)
+library(caTools)
+library(spdep)
+library(caret)
+
 
 # Setting parameters for scientific notation
 
@@ -761,7 +766,6 @@ ggplot(data = test_data_filter, aes(lagPriceError, Price.Error)) +
 
 ```{r}
 
-
 test_data %>%
   dplyr::select(Price.Predict, sale_price) %>%
     ggplot(aes(sale_price, Price.Predict)) +
@@ -777,6 +781,21 @@ test_data %>%
 ```
 ```{r}
 # Moran's I
+
+#use the same thng for wights and morans i 
+#move the filters to this cel too 
+
+# Spatial Lag
+coords <- st_coordinates(train_data) 
+neighborList <- knn2nb(knearneigh(coords, 5))
+spatialWeights <- nb2listw(neighborList, style="W", zero.policy = TRUE)
+train_data$lagPrice <- lag.listw(spatialWeights, train_data$sale_price)
+
+# On Errors
+coords.test <-  st_coordinates(test_data) 
+neighborList.test <- knn2nb(knearneigh(coords.test, 5))
+spatialWeights.test <- nb2listw(neighborList.test, style="W")
+
 
 moranTest <- moran.mc(na.omit(test_data_filter$Price.Error),
                       spatialWeights, nsim = 999)  
@@ -836,6 +855,7 @@ st_drop_geometry(test_data) %>%
       mapTheme()
 
 ```
+
 ```{r}
 
 test_data <-

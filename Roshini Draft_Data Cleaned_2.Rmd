@@ -1,0 +1,1323 @@
+---
+title: "Predicting Housing Prices in Philadelphia, PA"
+author: "Samriddhi Khare, Roshini Ganesh"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    code_download: true
+    theme: journal  
+---
+
+# Introduction
+
+The Philadelphia housing market is a dynamic and diverse landscape influenced by various factors that impact both prices and overall market conditions. This market reflects the economic and social dynamics of the city and the surrounding region.It encompasses a wide range of neighborhoods, each with its unique character, amenities, and housing styles. The city's diverse housing stock includes rowhouses, townhomes, apartments, and single-family homes, catering to a variety of lifestyles and preferences.
+
+Housing prices in Philadelphia have experienced fluctuations over the years, influenced by a combination of local and national factors. However, it's important to note that these prices can vary significantly based on factors such as the neighborhood, property type, and condition of the home. This project aims to evaluate the various factors affecting housing prices and create an accurate and generalizable OLS regression model to predict the housing prices in Philadelphia.
+
+<img src="./images/33rd-Street-Corner-of-West-Lehigh-Ave.jpg" width="300" align="right" style="display: inline; margin: 0 10px;"/>
+
+This code is built upon the classwork discussed [here](https://github.com/mafichman/musa_5080_2023/tree/main).
+
+```{r Setup Knitting Parameters, include=FALSE}
+  knitr::opts_chunk$set(
+    echo = TRUE,
+    warning = FALSE,
+    message = FALSE,
+   out.width = '100%',
+    fig.retina =3
+  )
+```
+
+## R Setup and Installing Packages
+
+This code chunk handles the essential tasks of loading necessary packages, configuring the Census API key, defining class functions, specifying a color palette, and managing global environment settings.
+
+```{r Set up Packages, warning = FALSE, message = FALSE}
+
+# Loading libraries
+
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(kableExtra)
+library(tidyr)
+library(ggplot2)
+library(viridis)
+library(stringr)
+library(tigris)
+library(ggcorrplot)
+library(stargazer)
+library(dplyr)
+library(caTools)
+library(spdep)
+library(caret)
+
+
+# Setting parameters for scientific notation
+
+options(scipen=999)
+options(tigris_class = "sf")
+
+# Functions and data directory
+
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+# Invoking color palettes to be used
+
+palettee <- c('#d7191c','#fdae61','#ffffbf','#abd9e9','#2c7bb6')
+
+# Registering API Key to be used
+
+census_api_key('bf2d507651b5a621dbadd44533fb4f3deaab26bf', overwrite = TRUE)
+
+```
+
+## Loading Data
+
+Data sources used include census and opendata philly 
+
+Data provided was cleaned and new variable were created 
+
+```{r Reading Data, results= 'hide'}
+
+# Reading Data
+
+data <- 
+  st_read("./data/studentData.geojson") %>%
+  st_transform('ESRI:102286')
+
+# Dropping columns with no values and filtering values within Philadelphia
+
+data <-  data %>% 
+  select(-cross_reference, -date_exterior_condition, -mailing_address_2, -mailing_care_of, -unfinished, -utility, -category_code, -category_code_description, -exempt_land, -separate_utilities, -sewer, - site_type, -house_extension, -street_direction, -suffix, -garage_type, -general_construction )%>% 
+  filter(mailing_city_state == "PHILADELPHIA PA" )
+
+```
+
+```{r Cleaning Data based on Metadata, results= 'hide'}
+
+## Filtering out 9 rows where year built is not given
+
+data <-  data %>% 
+  filter(year_built > 0 )
+
+## Categorizing if a Basement is present
+
+data <- data %>%
+  mutate(BasementPresent = case_when(basements == 'A' |
+  basements == 'B' |
+  basements == 'C' |
+  basements == 'D' |
+  basements == 'E' |
+  basements == 'F' |
+  basements == 'G' |
+  basements == 'H' |
+  basements == 'I' |
+  basements == 'J' ~ 1,
+  basements == '0' ~ 0))
+
+# Assigning value of 0 to 'NA' rows based on description in metadata
+
+data$BasementPresent[is.na(data$BasementPresent)] <- 0
+
+## Categorizing Basement Type
+
+library(dplyr)
+
+data <- data %>%
+  mutate(BasementType = case_when(basements == 'A' ~ 'Full size finished',
+  basements == 'B' ~ 'Full size semi-finished',
+  basements == 'C' ~ 'Full size unfinished',
+  basements == 'D' ~ 'Full size unknown finish',
+  basements == 'E' ~ 'Partial size finished',
+  basements == 'F' ~ 'Partial size semi-finished',
+  basements == 'G' ~ 'Partial size unfinished',
+  basements == 'H' ~ 'Partial size unknown finish',
+  basements == 'I' ~ 'Unknown size finished',
+  basements == 'J' ~ 'Unknown size unfinished',
+  basements == '0' ~ 'No basement'))
+
+# Assigning value of 0 to 'NA' rows based on description in metadata
+
+data$BasementType[is.na(data$BasementType)] <- "No basement"
+data$basements[is.na(data$basements)] <- 0
+
+## Categorizing based on Central Air
+
+data$central_air <- ifelse(data$central_air == 'Y', 1, 0)
+
+## Categorizing based on Exterior Condition
+
+data <- data %>%
+  mutate(ExteriorConditionType = case_when(exterior_condition == '1' |
+  exterior_condition == '2' |
+  exterior_condition == '3' ~ 'Good Condition',
+  exterior_condition == '4' |
+  exterior_condition == '5' ~ 'Average Condition',
+  exterior_condition == '6' ~ 'Below Average Condition',
+  exterior_condition == '7' ~ 'Vacant and Sealed'))
+
+# Assigning value to single 'NA' row based on 'interior_construction' rating for same row
+
+data$ExteriorConditionType[is.na(data$ExteriorConditionType)] <- "Good Condition"
+data$exterior_condition[is.na(data$exterior_condition)] <- 3
+
+## Categorizing based on Fireplaces
+
+# Assigning value of 0 to 'NA' rows based on description in metadata
+
+data$fireplaces[is.na(data$fireplaces)] <- 0
+
+## Categorizing based on Fuel Sources
+
+data <- data %>%
+  mutate(FuelType = case_when(fuel == 'A' ~ 'Natural Gas Powered',
+  fuel == 'B' ~ 'Oil Powered',
+  fuel == 'C' ~ 'Electric Powered',
+  fuel == 'E' ~ 'Solar Powered',
+  fuel == 'G' ~ 'Fuel Source Unknown'))
+
+# Assigning value of Unknown/G to 'NA' rows based on description in metadata
+
+data$FuelType[is.na(data$FuelType)] <- "Fuel Source Unknown"
+data$fuel[is.na(data$fuel)] <- "G"
+
+## Categorizing based on Garage Presence
+
+data <- data %>%
+  mutate(GaragePresent = case_when(garage_spaces == '0' ~ 0,
+  garage_spaces == '1' |
+  garage_spaces == '2' |
+  garage_spaces == '3' ~ 1))
+
+# Assigning value of 0 to 'NA' rows based on description in metadata
+
+data$GaragePresent[is.na(data$GaragePresent)] <- 0
+data$garage_spaces[is.na(data$garage_spaces)] <- 0
+
+## Categorizing based on Garage Types
+
+data <- data %>%
+  mutate(GarageType = case_when(garage_spaces == '0' ~ 'No Garage',
+  garage_spaces == '1' ~ 'Single Garage',
+  garage_spaces == '2' |
+  garage_spaces == '3' ~ 'Multiple Garages'))
+
+# Assigning value of 0 to 'NA' rows based on description in metadata
+
+data$GarageType[is.na(data$GarageType)] <- "No Garage"
+data$garage_spaces[is.na(data$garage_spaces)] <- 0
+
+## Categorizing based on Exterior Condition
+
+data <- data %>%
+  mutate(InteriorConditionType = case_when( interior_condition == '0' |
+  interior_condition == '1' |
+  interior_condition == '2' |
+  interior_condition == '3' ~ 'Good Condition',
+  interior_condition == '4' ~ 'Average Condition',
+  interior_condition == '5' ~ 'Below Average Condition',
+  interior_condition == '6' |
+  interior_condition == '7' ~ 'Vacant and/or Sealed'))
+
+# Assigning values to 0 or 'NA' rows based on exterior condition since interior and exterior conditions are equal in almost all cases
+
+data$InteriorConditionType[is.na(data$InteriorConditionType)] <- c(data$ExteriorConditionType)
+
+## Categorizing based on View Type
+
+data <- data %>%
+  mutate(ViewType = case_when(view_type == '0' ~ 'Nature of View Unknown',
+  view_type == 'I' ~ 'Typical View',
+  view_type == 'A' ~ 'Skyline View',
+  view_type == 'B' ~ 'River View',
+  view_type == 'C' ~ 'Park View',
+  view_type == 'D' ~ 'Commercial Area View',
+  view_type == 'E' ~ 'Industrial Area View',
+  view_type == 'H' ~ 'View of Landmark'))
+
+# Assigning value to NA rows to nature of view unknown
+
+data$ViewType[is.na(data$ViewType)] <- "Nature of View Unknown"
+data$view_type[is.na(data$view_type)] <- 0
+
+## Categorizing based on Topography Type
+
+data <- data %>%
+  mutate(TopographyType = case_when(topography == 'A' ~ 'Above Street Level Topography',
+  topography == 'B' ~ 'Below Street Level Topography',
+  topography == 'C' ~ 'Flood Plain Topography',
+  topography == 'D' ~ 'Rocky Topography',
+  topography == 'E' ~ 'Other Topography',
+  topography == 'F' ~ 'Level Topography'))
+
+# Assigning value to NA rows to nature of view unknown
+
+data$TopographyType[is.na(data$TopographyType)] <- "Topography Unknown"
+data$topography[is.na(data$topography)] <- 0
+
+## Categorizing based on Parcel Type
+
+data <- data %>%
+  mutate(ParcelType = case_when(parcel_shape == 'A' ~ 'Irregular Parcel',
+  parcel_shape == 'B' ~ 'Grossly Irregular Parcel',
+  parcel_shape == 'C' ~ 'Triangular Parcel',
+  parcel_shape == 'D' ~ 'Long Narrow Parcel',
+  parcel_shape == 'E' ~ 'Rectangular Parcel'))
+
+# Assigning value to NA rows to nature of view unknown
+
+data$ParcelType[is.na(data$ParcelType)] <- "Parcel Type Unknown"
+data$parcel_shape[is.na(data$parcel_shape)] <- 0
+
+
+```
+```{r Dropping columns with sale price0, warning=FALSE, results='hide'}
+
+data <-  data %>% 
+  filter(sale_price > 0)
+
+```
+
+
+```{r Imputing values for missing values of number of bedrooms, warning=FALSE, results='hide'}
+
+## Imputing values for missing values of number of bedrooms based on total livable area
+
+# Dropping 32 values of total livable area which are 0 for better prediction
+
+data <-  data %>% 
+  filter(total_livable_area > 0 )
+
+# Step 1 - Creating an index of 0 and 1 values for rows that have values for number of bathrooms and rows that do not
+
+data <- data %>%
+  mutate(BedroomIndex = case_when(number_of_bedrooms >= 1 ~ 1,
+                               number_of_bedrooms < 1 ~ 0))
+                               
+data$BedroomIndex[is.na(data$BedroomIndex)] <- 0
+
+# Step 2 - Creating a linear regression model relating number of bedrooms and total liveable area
+
+lm(number_of_bedrooms ~ total_livable_area, data=data)
+
+# Step 3 - Imputing new values for missing values of number of bedrooms using regression results
+
+for(i in 1:nrow(data))
+{
+  if (data$BedroomIndex[i] == 0)
+  {
+    data$number_of_bedrooms[i] = 2.1605650 + 0.0003057*data$total_livable_area[i]
+  }
+  }
+
+data$number_of_bedrooms <- round(data$number_of_bedrooms, digits=0)
+
+```
+
+```{r Imputing values for missing values of number of rooms, warning=FALSE, results='hide'}
+
+## Imputing values for missing values of number of rooms based on total livable area
+
+# Step 1 - Creating an index of 0 and 1 values for rows that have values for number of rooms and rows that do not
+
+data <- data %>%
+  mutate(RoomIndex = case_when(number_of_rooms >= 1 ~ 1,
+                               number_of_rooms < 1 ~ 0))
+                               
+data$RoomIndex[is.na(data$RoomIndex)] <- 0
+
+# Step 2 - Creating a linear regression model relating number of rooms and total livable area
+
+lm(number_of_rooms ~ total_livable_area, data=data)
+
+# Step 3 - Imputing new values for missing values of number of rooms using regression results
+
+for(i in 1:nrow(data))
+{
+  if (data$RoomIndex[i] == 0)
+  {
+    data$number_of_rooms[i] = 4.316503 + 0.001319*data$total_livable_area[i]
+  }
+  }
+
+data$number_of_rooms <- round(data$number_of_rooms, digits=0)
+
+```
+
+```{r Imputing values for missing values of number of bathrooms, warning=FALSE, results='hide'}
+
+## Imputing values for missing values of number of bathrooms based on total livable area
+
+# Step 1 - Creating an index of 0 and 1 values for rows that have values for number of bathrooms and rows that do not
+
+data <- data %>%
+  mutate(BathroomIndex = case_when(number_of_bathrooms >= 1 ~ 1,
+                               number_of_bathrooms < 1 ~ 0))
+
+data$BathroomIndex[is.na(data$BathroomIndex)] <- 0
+
+# Step 2 - Creating a linear regression model relating number of bathrooms and  total livable area
+
+lm(number_of_bathrooms ~ total_livable_area, data=data)
+
+# Step 3 - Imputing new values for missing values of number of bathrooms using regression results
+
+for(i in 1:nrow(data))
+{
+  if (data$BathroomIndex[i] == 0)
+  {
+    data$number_of_bathrooms[i] = 0.6426310 + 0.0003283*data$total_livable_area[i]
+  }
+  }
+
+data$number_of_bathrooms <- round(data$number_of_bathrooms, digits=0)
+
+```
+
+```{r Price/Sqfta, warning=FALSE, results='hide'}
+
+data <- 
+  data %>%
+  mutate(PricePerSqft = (sale_price/total_livable_area))
+
+```
+
+
+```{r filter data, warning=FALSE, results='hide'}
+data_og <- data
+
+data <- data %>% 
+  select(objectid, assessment_date, year_built, building_code, building_code_description, pin, building_code_new, building_code_description_new,  census_tract, geographic_ward, zoning, location, street_name, street_code, street_designation, zip_code, house_number, depth, frontage, central_air, fireplaces, fuel, FuelType, basements, BasementPresent, BasementType, garage_spaces, GaragePresent, GarageType, exterior_condition, ExteriorConditionType, interior_condition, InteriorConditionType, number_of_bathrooms, number_of_bedrooms, number_of_rooms, number_stories, total_livable_area, view_type, ViewType, topography, TopographyType, parcel_shape, ParcelType, sale_date, sale_year, sale_price, PricePerSqft, musaID, toPredict, geometry )
+```
+
+```{r filter outliers, warning=FALSE, results='hide'}
+
+data <-  data %>% 
+  filter(number_of_bedrooms <10, number_of_rooms<15, ((number_of_bathrooms+number_of_bedrooms) < number_of_rooms), PricePerSqft<1700, total_livable_area<10000)
+
+data <- 
+  data %>%
+  mutate(BuildingAge = (2023 - (year_built)))
+
+```
+
+
+## Census Data
+
+The years chosen for analysis are 2021 because covid recovery most recent to mkae more acccurate predicitons
+
+
+The variables chosen for this analysis include: 
+
+1. income because - 
+
+2. 
+
+3. 
+
+
+```{r census, cache=TRUE, warning=FALSE, results= 'hide'}
+
+acs_variable_list.2021 <- load_variables(2021, #year
+                                         "acs5", #five year ACS estimates
+                                         cache = TRUE)
+# 2021, A
+
+# Retrieve ACS data for Philadelphia tracts in 2020
+tracts21 <- get_acs(
+  geography = "tract",
+  variables = c(
+    "B01003_001",   # Total Population
+    "B19013_001",   # Median Household Income
+    "B25058_001",   # Median Rent
+    "B25008_002",   # Owner-Occupied Units
+    "B25008_003",   # Renter-Occupied Units
+    "B07001_032",   # Same House 75 Years Ago
+    "B07001_017",   # Same House 1 Year Ago
+    "B25088_003",   # Median Selected Monthly Owner Costs (homes without a mortgage)
+    "B25088_002",   # Median Selected Monthly Owner Costs (homes with a mortgage)
+    "B25064_001",   # Median Gross Rent (rent and utilities)
+    "B25117_001",   # Percentage of Housing Units with heat
+    "B15003_022",   # Educational Attainment: Bachelor's Degree
+    "B17001_002",   # Percentage of Population Below the Poverty Level
+    "B28002_004",   # Percentage of Housing Units with High-Speed Internet
+    "B25044_003",   # Percentage of Housing Units with No Vehicle Available
+    "B02001_002",   # Race and Ethnicity: White Alone
+    "B02001_003",   # Race and Ethnicity: Black or African American Alone
+    "B03001_003"    # Hispanic or Latino Origin of Population
+  ),
+  year = 2021,
+  state = "PA",
+  county = "Philadelphia",
+  geometry = TRUE,
+  output = "wide"
+)%>%
+  select(-NAME, -ends_with("M")) %>%
+  rename(totalpop = B01003_001E,                           # Total Population
+         med_income = B19013_001E,                         # Median Household Income
+         med_rent = B25058_001E,                           # Median Rent
+         owner_units = B25008_002E,                        # Owner-Occupied Units
+         renter_units = B25008_003E,                       # Renter-Occupied Units
+         same_house_75 = B07001_032E,                      # Same House 75 Years Ago
+         same_house_1 = B07001_017E,                       # Same House 1 Year Ago
+         monthly_costs_no_mortgage = B25088_003E,          # Median Selected Monthly Owner Costs (homes without a mortgage)
+         monthly_costs_with_mortgage = B25088_002E,        # Median Selected Monthly Owner Costs (homes with a mortgage)
+         med_gross_rent = B25064_001E,                     # Median Gross Rent (rent and utilities)
+         housing_units_with_heat = B25117_001E,            # Percentage of Housing Units with heat
+         edu_bachelors = B15003_022E,                      # Educational Attainment: Bachelor's Degree
+         pop_below_poverty = B17001_002E,                  # Percentage of Population Below the Poverty Level
+         housing_units_high_speed_internet = B28002_004E,  # Percentage of Housing Units with High-Speed Internet
+         housing_units_no_vehicle = B25044_003E,           # Percentage of Housing Units with No Vehicle Available
+         race_white = B02001_002E,                         # Race and Ethnicity: White Alone
+         race_black = B02001_003E,                         # Race and Ethnicity: Black or African American Alone
+         hispanic_latino = B03001_003E                     # Race and Ethnicity: Hispanic or Latino
+         )
+
+# Transform the data to ESRI:102728 projection
+tracts21 <- tracts21 %>% st_transform(st_crs(data))
+
+```
+
+## Open Data philly 
+
+private schools proximity, parks and landmarks, floodplains, daily arrests, litter score, heat index
+
+philly rising boundaries? 
+
+```{r Adding Data, warning=FALSE, results= 'hide'}
+
+# Nearest Schools
+## Adding data on Philadelphia Schools
+
+PhillySchools <-
+   st_read("./data/Schools.geojson") %>%
+  st_transform(st_crs(tracts21))
+
+PhillyPvtSchools <-
+   st_read("./data/Schools.geojson") %>%
+  filter(TYPE_SPECIFIC == "PRIVATE") %>%
+  st_transform(st_crs(tracts21))
+
+## Mapping nearest school
+
+nearest_school <- sf::st_nearest_feature(data, PhillySchools)
+nearest_pvt_school <- sf::st_nearest_feature(data, PhillyPvtSchools)
+
+## Converting schools to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillySchools)
+
+## Calculating distance
+
+data$dist_to_nearest_school <- rsgeo::distance_euclidean_pairwise(x, y[nearest_school])
+
+## Converting private schools to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillyPvtSchools)
+
+## Calculating distance
+
+data$dist_to_nearest_pvt_school <- rsgeo::distance_euclidean_pairwise(x, y[nearest_pvt_school])
+
+# Nearest Colleges
+## Adding data on Philadelphia Colleges
+
+PhillyColleges <-
+ st_read("./data/Universities_Colleges.geojson")%>%
+  st_transform(st_crs(tracts21))
+
+## Mapping nearest college
+
+nearest_college <- sf::st_nearest_feature(data, PhillyColleges)
+
+## Converting to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillyColleges)
+
+## Calculating distance
+
+data$dist_to_nearest_college <- rsgeo::distance_euclidean_pairwise(x, y[nearest_college])
+
+# Nearest Landmarks
+## Adding data on Philadelphia landmarks 
+
+PhillyLandmarks <-
+ st_read("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Landmark_Points/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson")%>%
+  st_transform(st_crs(tracts21))
+
+## Mapping nearest landmark
+
+nearest_landmark <- sf::st_nearest_feature(data, PhillyLandmarks)
+
+## Converting to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillyLandmarks)
+
+## Calculating distance
+
+data$dist_to_nearest_landmark <- rsgeo::distance_euclidean_pairwise(x, y[nearest_landmark])
+
+# Nearest Commercial Corridors
+## Adding data on Philadelphia Commercial Corridors 
+
+PhillyComCorr <-
+  st_read("./data/Commercial_Corridors.geojson") %>%
+  st_transform(st_crs(tracts21))
+
+## Is it within the commercial corridor?
+
+data$within_com_corr <- ifelse(st_within(data, PhillyComCorr), 1, 0)
+
+data <- data %>%
+  mutate(within_com_corr = ifelse(is.na(within_com_corr), 0, 1))
+
+## Mapping nearest commercial corridor
+
+nearest_corridor <- sf::st_nearest_feature(data, PhillyComCorr)
+
+## Converting to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillyComCorr)
+
+## Calculating distance
+
+data$dist_to_comm_corr <- rsgeo::distance_euclidean_pairwise(x, y[nearest_corridor])
+
+# Litter Index
+## Adding data on Philadelphia's Litter Index
+
+PhillyLitter <-
+  st_read("./data/Litter_Index.geojson") %>%
+  st_transform(st_crs(tracts21))
+
+## Joining the litter score
+
+data <- 
+ st_join(data,(PhillyLitter %>%
+          select(-OBJECTID, -Shape__Area, -Shape__Length )%>%
+          rename(litter = SCORE))) 
+
+#Nearest Flood Plains
+## Adding data on Philadelphia's Flood Plain
+
+PhillyFlood <- 
+  st_read("./data/FEMA_100_flood_Plain.geojson") %>%
+  st_transform(st_crs(tracts21))
+
+## Is it within the floodplain?
+
+data$within_flood <- ifelse(st_within(data, PhillyFlood), 1, 0)
+
+data <- data %>%
+  mutate(within_flood = ifelse(is.na(within_flood), 0, 1))
+
+## Mapping nearest floodplain 
+
+nearest_floodplain <- sf::st_nearest_feature(data, PhillyFlood)
+
+## Converting to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillyFlood)
+
+## Calculating distance
+
+data$dist_to_floodplain <- rsgeo::distance_euclidean_pairwise(x, y[nearest_floodplain])
+
+# Nearest Transit Stops
+## Adding data on Philadelphia's Transit Stops
+
+el <- st_read("https://opendata.arcgis.com/datasets/8c6e2575c8ad46eb887e6bb35825e1a6_0.geojson")
+Broad_St <- st_read("https://opendata.arcgis.com/datasets/2e9037fd5bef406488ffe5bb67d21312_0.geojson")
+
+PhillySeptaStops <- 
+  rbind(
+     el %>% 
+      mutate(Line = "El") %>%
+      dplyr::select(Station, Line),
+     Broad_St %>%
+      mutate(Line ="Broad_St") %>%
+      dplyr::select(Station, Line)) %>%
+  st_transform(st_crs(tracts21))  
+
+## Mapping nearest transit stop
+
+nearest_station <- sf::st_nearest_feature(data, PhillySeptaStops)
+
+## Converting to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillySeptaStops)
+
+## Calculating distance
+
+data$dist_to_nearest_station <- rsgeo::distance_euclidean_pairwise(x, y[nearest_station])
+
+# Nearest Trails
+## Adding data on Philadelphia Trails 
+
+PhillyTrails <-
+ st_read("./data/PPR_Trails.geojson")%>%
+  st_transform(st_crs(tracts21))
+
+## Mapping nearest trail
+
+nearest_trail <- sf::st_nearest_feature(data, PhillyTrails)
+
+## Converting to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillyTrails)
+
+## Calculating distance
+
+data$dist_to_nearest_trail <- rsgeo::distance_euclidean_pairwise(x, y[nearest_trail])
+
+# Nearest Tennis Courts
+## Adding data on Philadelphia Tennis Courts 
+
+PhillyTennisCourts <-
+ st_read("./data/PPR_Tennis_Courts.geojson")%>%
+  st_transform(st_crs(tracts21))
+
+## Mapping nearest tennis court
+
+nearest_tenniscourt <- sf::st_nearest_feature(data, PhillyTennisCourts)
+
+## Converting to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillyTennisCourts)
+
+## Calculating distance
+
+data$dist_to_nearest_tenniscourt <- rsgeo::distance_euclidean_pairwise(x, y[nearest_tenniscourt])
+
+# Nearest Playgrounds
+## Adding data on Philadelphia Playgrounds 
+
+PhillyPlaygrounds <-
+ st_read("./data/PPR_Playgrounds.geojson")%>%
+  st_transform(st_crs(tracts21))
+
+## Mapping nearest playground
+
+nearest_playground <- sf::st_nearest_feature(data, PhillyPlaygrounds)
+
+## Converting to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillyPlaygrounds)
+
+## Calculating distance
+
+data$dist_to_nearest_playground <- rsgeo::distance_euclidean_pairwise(x, y[nearest_playground])
+
+# Nearest Pools
+## Adding data on Philadelphia Pools 
+
+PhillyPools <-
+ st_read("./data/PPR_Swimming_Pools.geojson")%>%
+  st_transform(st_crs(tracts21))
+
+## Mapping nearest pool
+
+nearest_pool <- sf::st_nearest_feature(data, PhillyPools)
+
+## Converting to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillyPools)
+
+## Calculating distance
+
+data$dist_to_nearest_pool <- rsgeo::distance_euclidean_pairwise(x, y[nearest_pool])
+
+# Nearest Police Stations
+## Adding data on Philadelphia Police Stations
+
+PhillyPoliceStations <-
+ st_read("./data/Police_Stations.geojson")%>%
+  st_transform(st_crs(tracts21))
+
+## Mapping nearest police station
+
+nearest_police_station <- sf::st_nearest_feature(data, PhillyPoliceStations)
+
+## Converting to rsgeo geometries
+
+x <- rsgeo::as_rsgeo(data)
+y <- rsgeo::as_rsgeo(PhillyPoliceStations)
+
+## Calculating distance
+
+data$dist_to_nearest_police_station <- rsgeo::distance_euclidean_pairwise(x, y[nearest_police_station])
+
+```
+
+# Exploratory Data Analysis
+
+## Mapping Internal Variables
+
+```{r}
+
+##Mapping Internal Variables
+# Mapping sale price
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile Breaks:\n Sale Price", 
+                   na.value = NA) +
+  labs(title="Properties by Sale Price", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.1.1") +
+  mapTheme()
+
+# Mapping Size
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = data, aes(colour = q5(total_livable_area)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "total_livable_area"),
+                   name="Quintile Breaks:\nArea in Sq Ft", 
+                   na.value = NA) +
+  labs(title="Properties by Size", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.1.2") +
+  mapTheme()
+
+# Mapping Interior Condition
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = data, aes(colour = (InteriorConditionType)), 
+          show.legend = "point", size = .5) +
+  scale_colour_manual(values = palettee, name="Interior Condition",
+                   na.value = NA) +
+  labs(title="Properties by Internal Condition", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.1.3") +
+  mapTheme()
+
+```
+
+
+## Mapping External Variables
+
+```{r}
+## Mapping External Variables
+
+# Mapping properties around schools
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .75, alpha=0.3) + 
+  geom_sf(data = PhillySchools, colour = "black", size = 1.5, alpha=0.6) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile Breaks:\nSale Prices", 
+                   na.value = NA) + 
+  labs(title="Properties Around Schools", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.2.1") +
+  mapTheme()
+
+# Mapping properties around commercial corridors
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .75, alpha=0.3) + 
+  geom_sf(data = PhillyComCorr, colour = "black", fill="black", alpha=0.6) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile Breaks:\nSale Prices", 
+                   na.value = NA) + 
+  labs(title="Properties Around Commercial Corridors", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.2.2") +
+  mapTheme()
+
+# Mapping properties around landmarks
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .75, alpha=0.3) + 
+  geom_sf(data = PhillyLandmarks, colour = "black", fill="black", size = .75, alpha=0.6) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile Breaks:\nSale Prices", 
+                   na.value = NA) + 
+  labs(title="Properties Around Landmarks", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.2.3") +
+  mapTheme()
+
+# Mapping properties around floodplains
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .75, alpha=0.3) + 
+  geom_sf(data = PhillyFlood, colour = "black", fill="black", size = .75, alpha=0.6) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile Breaks:\nSale Prices", 
+                   na.value = NA) + 
+  labs(title="Properties Around Flood Plain", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.2.4") +
+  mapTheme()
+
+#library(gridExtra)
+
+#grid.arrange(
+  #b1,
+  #b2,
+  #b3,
+  #b4,
+  #nrow = 2,
+  #widths=c(4,4),
+  #top = "Title of the page"
+  #)
+
+
+```
+
+
+## Mapping Demographic Variables
+
+```{r Price/Sqft, warning=FALSE, results='hide'}
+
+tracts21 <- 
+  tracts21 %>%
+  mutate(PctWhite = ((race_white/totalpop)*100),
+         PctBlack = ((race_black/totalpop)*100),
+         PctHispanic = ((hispanic_latino/totalpop)*100),
+         PctBachelors = ((edu_bachelors/totalpop)*100),
+         PctPoverty = ((pop_below_poverty/totalpop)*100))
+
+```
+
+```{r}
+## Mapping Demographic Variables
+
+# Mapping median income around sold properties
+
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = tracts21, aes(fill = q5(med_income)), color = "transparent", alpha=0.5) +
+    scale_fill_brewer(palette = "BuPu",
+                      labels = qBr(tracts21, "med_income"),
+                      name = "Median Income\nQuintile Breaks") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .2) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile Breaks:\nSale Prices", 
+                   na.value = NA) + 
+  labs(title="Median Income Around Sold Properties", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.3.1")+
+  mapTheme()
+
+
+
+# Mapping white population around sold properties
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = tracts21, aes(fill = q5(PctWhite)), color = "transparent", alpha=0.5) +
+    scale_fill_brewer(palette = "BuPu",
+                      labels = qBr(tracts21, "PctWhite"),
+                      name = "% White Population\nQuintile Breaks") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .2) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile Breaks:\nSale Prices", 
+                   na.value = NA) + 
+  labs(title="% White Population Around Sold Properties", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.3.2")+
+  mapTheme()
+
+# Mapping black population around sold properties
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = tracts21, aes(fill = q5(PctBlack)), color = "transparent", alpha=0.5) +
+    scale_fill_brewer(palette = "BuPu",
+                      labels = qBr(tracts21, "PctBlack"),
+                      name = "% Black Population\nQuintile Breaks") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .2) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile Breaks:\nSale Prices", 
+                   na.value = NA) + 
+  labs(title="% Black Population Around Sold Properties", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.3.3")+
+  mapTheme()
+
+# Mapping population with bachelor's degree around sold properties
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = tracts21, aes(fill = q5(PctBachelors)), color = "transparent", alpha=0.5) +
+    scale_fill_brewer(palette = "BuPu",
+                      labels = qBr(tracts21, "PctBachelors"),
+                      name = "% Bachelor's Degree\nQuintile Breaks") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .2) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile Breaks:\nSale Prices", 
+                   na.value = NA) + 
+  labs(title="% Population with Bachelor's Degree Around Sold Properties", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.3.4")+
+  mapTheme()
+
+# Mapping population in poverty around sold properties
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
+  geom_sf(data = tracts21, aes(fill = q5(PctPoverty)), color = "transparent", alpha=0.5) +
+    scale_fill_brewer(palette = "BuPu",
+                      labels = qBr(tracts21, "PctPoverty"),
+                      name = "% Pop in Poverty\nQuintile Breaks") +
+  geom_sf(data = data, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .2) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data, "sale_price"),
+                   name="Quintile Breaks:\nSale Prices", 
+                   na.value = NA) + 
+  labs(title="% Population in Poverty Around Sold Properties", subtitle = "Philadelphia 2022-2023", 
+      caption="Figure 3.3.5")+
+  mapTheme()
+
+```
+```{r}
+
+# joining census data
+
+data <- 
+  st_join(data, tracts21)
+
+```
+
+```{r}
+InternalVariables <- data 
+
+InternalVariables <- st_drop_geometry(InternalVariables)
+
+InternalVariables <- InternalVariables %>%
+  dplyr::select("sale_price", "PricePerSqft", "total_livable_area", "year_built", "number_of_rooms", "number_of_bathrooms", "number_of_bedrooms") 
+
+stargazer(as.data.frame(InternalVariables), type="text", digits=1, title = "Descriptive Statistics for Philadelphia Homes Internal Variables (Figure 4.1)", out = "Training_PHLInternal.txt")
+```
+
+```{r}
+DemographicVariables <- data 
+
+DemographicVariables <- st_drop_geometry(DemographicVariables)
+
+DemographicVariables <- DemographicVariables %>%
+  dplyr::select("PctWhite", "PctBlack", "PctHispanic", "PctBachelors", "PctPoverty", "med_income") 
+
+stargazer(as.data.frame(DemographicVariables), type="text", digits=1, title = "Descriptive Statistics for Philadelphia Homes Spatial Variables (Figure 4.1)", out = "Training_PHLSpatial.txt")
+```
+```{r fig.align="center", warning=FALSE, echo = FALSE, fig.width = 14}
+options(scipen = 9999) #turns off scientific notation and how many points
+
+Variable <- data %>%
+  filter(sale_price < 10000000)
+
+## Scatterplot
+st_drop_geometry(Variable) %>% 
+  dplyr::select(sale_price, PricePerSqft, year_built, number_of_bathrooms, number_of_bedrooms, number_of_rooms, total_livable_area, med_income, PctWhite,PctBlack, PctHispanic, PctBachelors, PctPoverty, ) %>% 
+  filter(sale_price < 10000000) %>%
+  gather(Variable, Value, -sale_price) %>% 
+   ggplot(aes(Value, sale_price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     labs(title = "Price as a function of continuous variables", 
+          caption="Figure 4.1") +
+     plotTheme()
+```
+
+## title
+
+
+```{r}
+
+variables <- c(
+  "sale_price", "number_of_bathrooms", "PricePerSqft","dist_to_nearest_pvt_school", "dist_to_comm_corr", "dist_to_nearest_station", "dist_to_nearest_trail", "med_income", "dist_to_nearest_pool", "frontage", "central_air", "fireplaces", "BasementPresent", "exterior_condition", "PctWhite", "PctBlack", "total_livable_area", "BuildingAge",  "total_livable_area", "PctBachelors", "PctPoverty"
+)
+
+numericVars <- data %>%
+  st_drop_geometry(data) %>%
+  select(variables)%>%
+  na.omit()
+
+ggcorrplot(
+  round(cor(numericVars), 1), 
+  p.mat = cor_pmat(numericVars),
+  colors = c('#d7191c','#ffffbf','#2c7bb6'),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across numeric variables") 
+#  plotTheme()
+```
+
+# Regressions
+
+```{r}
+
+#not sure if all this is needed
+
+#here we do it with the complete dataset for some reason? 
+
+reg1 <- lm(sale_price ~ ., data = st_drop_geometry(data) %>%  
+             #dplyr::filter(toPredict == "MODELLING") %>%
+                                 dplyr::select(variables))
+
+summary(reg1)
+
+# pretty regression
+
+print(stargazer(reg1, type="text", digits=1, title="Linear Model of Training Dataset (Figure 5)", out = "Training LM.txt"))
+
+```
+
+```{r}
+
+## Creating the training and test set
+modelling_data <- data %>% filter(toPredict == "MODELLING")
+
+set.seed(999) #makes sure data is split same way every time
+
+## Splitting the data
+split <- sample.split(modelling_data$objectid, SplitRatio = 0.75)
+
+## Creating the training and test sets
+train_data <- modelling_data[split,]
+test_data <- modelling_data[!split,]
+```
+
+```{r}
+
+#regression on training data
+
+reg2 <- lm(sale_price ~ ., data = st_drop_geometry(train_data) %>%  
+                                 dplyr::select(variables))
+
+## Plot regression (didnt work)
+# effect_plot(reg2, pred = total_livable_area, interval = TRUE, plot.points = TRUE)
+
+
+test_data <-
+  test_data %>%
+  mutate(Price.Predict = predict(reg2, test_data),
+         Price.Error = Price.Predict - sale_price,
+         Price.AbsError = abs(Price.Predict - sale_price),
+         Price.APE = (abs(Price.Predict - sale_price)) / Price.Predict)
+
+```
+
+```{r}
+# table of MAE and MAPE
+
+## Accuracy - Mean Absolute Error
+MAE <- data.frame(mean(test_data$Price.AbsError, na.rm = T))
+MAPE <- data.frame(mean(test_data$Price.APE, na.rm = T)) #MAPE
+
+reg.MAE.MAPE <- 
+  cbind(MAE, MAPE) %>%
+  kable(caption = "Regression MAE & MAPE (Figure 5.1)") %>%
+  kable_styling("striped",full_width = F) 
+
+reg.MAE.MAPE
+
+```
+
+
+```{r}
+
+test_data <-
+  test_data %>%
+  filter(sale_price < 10000000)
+
+## K-Fold: Generalizability Cross-Validation
+
+fitControl <- trainControl(method = "cv", number = 100)
+set.seed(369)
+
+reg.cv <- 
+  train(sale_price ~ ., data = st_drop_geometry(test_data) %>% 
+                                dplyr::select(variables),
+method = "lm", trControl = fitControl, na.action = na.pass)
+
+#This needs to be work-shopped. It stopped working and I don't know why. The code without an object assigned also outputs.
+
+#reg.cv$resample[1:5,]
+
+#mean(reg.cv$resample[,3])
+
+#reg.cv$resample[7,]
+
+
+stargazer(as.data.frame(reg.cv$resample), type="text", digits=1, title="Cross Validation Results (5.2)", out = "CV.txt") #all cv
+
+```
+
+```{r}
+#plotting the cross validation stuff
+
+ggplot(reg.cv$resample, aes(x=MAE)) +
+  geom_histogram(fill = "blue") +
+  labs(title = "Cross Validation Tests in Mean Average Error", caption="Figure 5.3") +
+  plotTheme()
+
+```
+```{r}
+
+test_data %>%
+  dplyr::select(Price.Predict, sale_price) %>%
+    ggplot(aes(sale_price, Price.Predict)) +
+  geom_point() +
+  stat_smooth(aes(sale_price, sale_price), 
+             method = "lm", se = FALSE, size = 1, colour="#d7191c") + 
+  stat_smooth(aes(Price.Predict, sale_price), 
+              method = "lm", se = FALSE, size = 1, colour="#2c7bb6") +
+  labs(title="Predicted Sale Price as a Function of Observed Price",
+       subtitle="Red line represents a perfect prediction; Blue line represents prediction",
+       caption = "Figure 6.2") +
+  plotTheme()
+```
+
+```{r}
+
+#use the same thng for wights and morans i 
+#move the filters to this cel too 
+
+
+# Spatial Lag for price
+coords <- st_coordinates(test_data) 
+neighborList <- knn2nb(knearneigh(coords, 5))
+spatialWeights <- nb2listw(neighborList, style="W", zero.policy = TRUE)
+test_data$lagPrice <- lag.listw(spatialWeights, test_data$sale_price)
+
+test_data <- test_data %>%
+  mutate(lagPriceError = lag.listw(spatialWeights, Price.Error, NAOK = TRUE))
+
+# Filtering greater than 0 values
+
+test_data_filter <- test_data %>%
+  filter(Price.Error > 0, lagPriceError > 0)
+
+# Moran's I
+
+ggplot(data = test_data, aes(lagPriceError, Price.Error)) +
+  geom_point(size = .85,colour = "black") + 
+  geom_smooth(method = "lm",colour = "red",size = 1.2) +
+  labs(title="Price Errors",
+       caption = "Figure 6.1") +
+  plotTheme()
+
+moranTest <- moran.mc(na.omit(test_data$Price.Error),
+                      spatialWeights, nsim = 999)  
+
+ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
+  geom_histogram(binwidth = 0.07) +
+  geom_vline(aes(xintercept = moranTest$statistic), colour = "#d7191c",size=1) +
+  scale_x_continuous(limits = c(-1,1)) +
+  labs(title="Observed and permuted Moran's I",
+       subtitle= "Observed Moran's I in red",
+       caption = "Figure 6.3",
+       x="Moran's I",
+       y="Count") +
+  plotTheme()
+```
+
+
+```{r}
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
+  geom_sf(data = test_data, aes(colour = q5(Price.AbsError)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(test_data,"Price.AbsError"),
+                   name="Quintile\nBreaks") +
+  labs(title="Map of Price Absolute Errors, Phill", 
+      caption="Figure 6.4") +
+  mapTheme()
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
+  geom_sf(data = test_data, aes(colour = q5(Price.AbsError)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(test_data,"Price.Predict"),
+                   name="Quintile\nBreaks") +
+  labs(title="predicted sale price", 
+      caption="Figure 6.4") +
+  mapTheme()
+```
+
+```{r}
+
+#this is wrong 
+
+st_drop_geometry(test_data) %>%
+  group_by(census_tract) %>%
+  summarize(MAPE = mean(Price.APE, na.rm = T)) %>%
+  ungroup() %>% 
+  cross_join( tracts21)%>%
+    st_sf() %>%
+    ggplot() + 
+   geom_sf(aes(fill = MAPE)) +
+      scale_fill_gradient(low = palettee[5], high = palettee[1],
+                          name = "MAPE") +
+  geom_sf(data = test_data, colour = "black", show.legend = "point", size = .5) +
+      labs(title = "Mean test set MAPE by Block Groups",
+           caption = "Figure 7.3") +
+      mapTheme()
+
+```
+
+```{r}
+
+test_data <-
+  test_data %>%
+  group_by(census_tract) %>%
+  mutate(MeanPrice = mean(sale_price))
+
+test_data <-
+  test_data %>%
+  group_by(census_tract) %>%
+  mutate(MAPE = mean(Price.APE)) 
+
+#This now seems correct versus the old version - woo! 
+
+ggplot(test_data) +
+  geom_point(aes(MeanPrice, MAPE)) +
+  geom_smooth(method = "lm", aes(MeanPrice, MAPE), se = FALSE, colour = "green") +
+  labs(title = "MAPE by Block Group as a function of mean price by Block Group",
+       x = "Mean Home Price", y = "MAPE",
+       caption = "Figure 7.5") +
+  plotTheme()
+```
+
+
