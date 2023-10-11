@@ -15,9 +15,11 @@ output:
 
 The Philadelphia housing market is a dynamic and diverse landscape influenced by various factors that impact both prices and overall market conditions. This market reflects the economic and social dynamics of the city and the surrounding region.It encompasses a wide range of neighborhoods, each with its unique character, amenities, and housing styles. The city's diverse housing stock includes rowhouses, townhomes, apartments, and single-family homes, catering to a variety of lifestyles and preferences.
 
+<img src="./images/33rd-Street-Corner-of-West-Lehigh-Ave.jpg" width="300" align="right" style="display: inline; margin: 0 10px;"/>
+
 Housing prices in Philadelphia have experienced fluctuations over the years, influenced by a combination of local and national factors. However, it's important to note that these prices can vary significantly based on factors such as the neighborhood, property type, and condition of the home. This project aims to evaluate the various factors affecting housing prices and create an accurate and generalizable OLS regression model to predict the housing prices in Philadelphia.
 
-<img src="./images/33rd-Street-Corner-of-West-Lehigh-Ave.jpg" width="300" align="right" style="display: inline; margin: 0 10px;"/>
+The process of creating this model was extremely iterative, and involved multiple rounds of trial and error, particularly in attempts to minimize the errors in predictions. The maps, correlation matrix and scatterplots are all illustrative of variables that were considered, wrangled and filtered as part of the data analysis process.  
 
 This code is built upon the classwork discussed [here](https://github.com/mafichman/musa_5080_2023/tree/main).
 
@@ -54,7 +56,10 @@ library(dplyr)
 library(caTools)
 library(spdep)
 library(caret)
-
+library(jtools)     
+library(ggstance) 
+library(ggpubr)    
+library(broom.mixed) 
 
 # Setting parameters for scientific notation
 
@@ -75,11 +80,15 @@ census_api_key('bf2d507651b5a621dbadd44533fb4f3deaab26bf', overwrite = TRUE)
 
 ```
 
-## Loading Data
+# Data Wrangling
 
-Data sources used include census and opendata philly 
+Census, OpenData Philly and provided Dataset 
 
-Data provided was cleaned and new variable were created 
+## Provided Dataset and Internal Variables 
+
+Provided dataset was messy and incomplete
+
+Data provided was cleaned 
 
 ```{r Reading Data, results= 'hide'}
 
@@ -96,6 +105,9 @@ data <-  data %>%
   filter(mailing_city_state == "PHILADELPHIA PA" )
 
 ```
+### Categorical Variables 
+
+making binaries from categoricals etc 
 
 ```{r Cleaning Data based on Metadata, results= 'hide'}
 
@@ -211,7 +223,6 @@ data <- data %>%
 data$GarageType[is.na(data$GarageType)] <- "No Garage"
 data$garage_spaces[is.na(data$garage_spaces)] <- 0
 
-## Categorizing based on Exterior Condition
 
 data <- data %>%
   mutate(InteriorConditionType = case_when( interior_condition == '0' |
@@ -275,13 +286,12 @@ data$parcel_shape[is.na(data$parcel_shape)] <- 0
 
 
 ```
-```{r Dropping columns with sale price0, warning=FALSE, results='hide'}
 
-data <-  data %>% 
-  filter(sale_price > 0)
+### Imputing Missing Data 
 
-```
+Making regressions and ffilling in missing varibales for 
 
+#### Bedrooms
 
 ```{r Imputing values for missing values of number of bedrooms, warning=FALSE, results='hide'}
 
@@ -318,6 +328,8 @@ data$number_of_bedrooms <- round(data$number_of_bedrooms, digits=0)
 
 ```
 
+#### Rooms 
+
 ```{r Imputing values for missing values of number of rooms, warning=FALSE, results='hide'}
 
 ## Imputing values for missing values of number of rooms based on total livable area
@@ -347,6 +359,8 @@ for(i in 1:nrow(data))
 data$number_of_rooms <- round(data$number_of_rooms, digits=0)
 
 ```
+
+#### Bathrooms
 
 ```{r Imputing values for missing values of number of bathrooms, warning=FALSE, results='hide'}
 
@@ -378,30 +392,33 @@ data$number_of_bathrooms <- round(data$number_of_bathrooms, digits=0)
 
 ```
 
+### Creating New Variables 
+
 ```{r Price/Sqfta, warning=FALSE, results='hide'}
 
 data <- 
   data %>%
   mutate(PricePerSqft = (sale_price/total_livable_area))
 
+data <- 
+  data %>%
+  mutate(BuildingAge = (2023 - (year_built)))
+
 ```
 
+### Dropping Columns and Outliers 
 
 ```{r filter data, warning=FALSE, results='hide'}
-data_og <- data
+
 
 data <- data %>% 
-  select(objectid, assessment_date, year_built, building_code, building_code_description, pin, building_code_new, building_code_description_new,  census_tract, geographic_ward, zoning, location, street_name, street_code, street_designation, zip_code, house_number, depth, frontage, central_air, fireplaces, fuel, FuelType, basements, BasementPresent, BasementType, garage_spaces, GaragePresent, GarageType, exterior_condition, ExteriorConditionType, interior_condition, InteriorConditionType, number_of_bathrooms, number_of_bedrooms, number_of_rooms, number_stories, total_livable_area, view_type, ViewType, topography, TopographyType, parcel_shape, ParcelType, sale_date, sale_year, sale_price, PricePerSqft, musaID, toPredict, geometry )
+  select(objectid, assessment_date, BuildingAge, year_built, building_code, building_code_description, pin, building_code_new, building_code_description_new,  census_tract, geographic_ward, zoning, location, street_name, street_code, street_designation, zip_code, house_number, depth, frontage, central_air, fireplaces, fuel, FuelType, basements, BasementPresent, BasementType, garage_spaces, GaragePresent, GarageType, exterior_condition, ExteriorConditionType, interior_condition, InteriorConditionType, number_of_bathrooms, number_of_bedrooms, number_of_rooms, number_stories, total_livable_area, view_type, ViewType, topography, TopographyType, parcel_shape, ParcelType, sale_date, sale_year, sale_price, PricePerSqft, musaID, toPredict, geometry )
 ```
 
 ```{r filter outliers, warning=FALSE, results='hide'}
 
 data <-  data %>% 
-  filter(number_of_bedrooms <10, number_of_rooms<15, ((number_of_bathrooms+number_of_bedrooms) < number_of_rooms), PricePerSqft<1700, total_livable_area<10000)
-
-data <- 
-  data %>%
-  mutate(BuildingAge = (2023 - (year_built)))
+  filter(number_of_bedrooms <10, number_of_rooms<15, ((number_of_bathrooms+number_of_bedrooms) < number_of_rooms), PricePerSqft<1500, total_livable_area<10000)
 
 ```
 
@@ -764,7 +781,114 @@ data$dist_to_nearest_police_station <- rsgeo::distance_euclidean_pairwise(x, y[n
 
 ```
 
+```{r}
+# Philadelphia Shootings
+## Adding data on Philadelphia Shootings
+
+PhillyShootings <-
+ st_read("./data/shootings2021.geojson")%>%
+  dplyr::select("date_", "point_x", "point_y", "geometry")%>%
+  st_transform(st_crs(data))%>%
+  na.omit() 
+
+##calculating distance to nearest neighbors
+
+library(sf)
+library(spatstat)
+library(class)
+
+data_ppp <- as.ppp(data)
+PhillyShootings_ppp <- as.ppp(PhillyShootings)
+
+data$crime_nn5 <- nncross(data_ppp, PhillyShootings_ppp, k = 5)
+
+```
+
+```{r Price/Sqft, warning=FALSE, results='hide'}
+
+tracts21 <- 
+  tracts21 %>%
+  mutate(PctWhite = ((race_white/totalpop)*100),
+         PctBlack = ((race_black/totalpop)*100),
+         PctHispanic = ((hispanic_latino/totalpop)*100),
+         PctBachelors = ((edu_bachelors/totalpop)*100),
+         PctPoverty = ((pop_below_poverty/totalpop)*100))
+
+```
+
+```{r}
+
+# joining census data
+
+data <- 
+  st_join(data, tracts21)
+
+```
+
+```{r}
+
+#saving for prediction 
+
+data_og <- data
+
+data <- data %>%
+  filter(sale_price > 0) 
+
+```
+
+
 # Exploratory Data Analysis
+
+```{r}
+InternalVariables <- data 
+
+InternalVariables <- st_drop_geometry(InternalVariables)
+
+InternalVariables <- InternalVariables %>%
+  dplyr::select("sale_price", "PricePerSqft", "total_livable_area", "year_built", "number_of_rooms", "number_of_bathrooms", "number_of_bedrooms") 
+
+stargazer(as.data.frame(InternalVariables), type="text", digits=1, title = "Descriptive Statistics for Philadelphia Homes Internal Variables (Figure 4.1)", out = "Training_PHLInternal.txt")
+```
+
+```{r}
+DemographicVariables <- data 
+
+DemographicVariables <- st_drop_geometry(DemographicVariables)
+
+DemographicVariables <- DemographicVariables %>%
+  dplyr::select("PctWhite", "PctBlack", "PctHispanic", "PctBachelors", "PctPoverty", "med_income") 
+
+stargazer(as.data.frame(DemographicVariables), type="text", digits=1, title = "Descriptive Statistics for Philadelphia Homes Demographic Variables (Figure 4.1)", out = "Training_PHLSpatial.txt")
+```
+```{r}
+
+SpatialVariables <- data 
+
+SpatialVariables <- st_drop_geometry(SpatialVariables)
+
+SpatialVariables <- SpatialVariables %>%
+  dplyr::select("dist_to_nearest_school", "dist_to_nearest_pvt_school", "dist_to_nearest_landmark", "dist_to_comm_corr", "dist_to_nearest_station", "dist_to_nearest_trail", "dist_to_nearest_police_station","crime_nn5") 
+
+stargazer(as.data.frame(SpatialVariables), type="text", digits=1, title = "Descriptive Statistics for Philadelphia Homes Spatial Variables (Figure 4.1)", out = "Training_PHLSpatial.txt")
+```
+
+```{r fig.height=20, fig.width=14}
+CategoricalVariables <- data 
+CategoricalVariables <- st_drop_geometry(CategoricalVariables)
+CategoricalVariables <- CategoricalVariables %>%
+  dplyr::select("BasementType", "GarageType", "ViewType", "ExteriorConditionType", "InteriorConditionType", "building_code_description_new","sale_price") 
+
+CategoricalVariables %>%
+  gather(CategoricalVariables, Value, -sale_price) %>%
+  ggplot(aes(Value, sale_price)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~CategoricalVariables, scales = "free", ncol=2) +
+  labs(title = "Price as a function of Categorical Variables") +
+  plotTheme() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
 
 ## Mapping Internal Variables
 
@@ -814,10 +938,10 @@ ggplot() +
 ```
 
 
-## Mapping External Variables
+## Mapping Spatial Variables
 
 ```{r}
-## Mapping External Variables
+## Mapping Spatial Variables
 
 # Mapping properties around schools
 
@@ -897,23 +1021,12 @@ ggplot() +
 
 ## Mapping Demographic Variables
 
-```{r Price/Sqft, warning=FALSE, results='hide'}
 
-tracts21 <- 
-  tracts21 %>%
-  mutate(PctWhite = ((race_white/totalpop)*100),
-         PctBlack = ((race_black/totalpop)*100),
-         PctHispanic = ((hispanic_latino/totalpop)*100),
-         PctBachelors = ((edu_bachelors/totalpop)*100),
-         PctPoverty = ((pop_below_poverty/totalpop)*100))
-
-```
 
 ```{r}
 ## Mapping Demographic Variables
 
 # Mapping median income around sold properties
-
 
 ggplot() +
   geom_sf(data = tracts21, fill = "grey89", color = "darkgrey") +
@@ -1006,36 +1119,12 @@ ggplot() +
   mapTheme()
 
 ```
-```{r}
 
-# joining census data
 
-data <- 
-  st_join(data, tracts21)
 
-```
+## Scatterplots
 
-```{r}
-InternalVariables <- data 
 
-InternalVariables <- st_drop_geometry(InternalVariables)
-
-InternalVariables <- InternalVariables %>%
-  dplyr::select("sale_price", "PricePerSqft", "total_livable_area", "year_built", "number_of_rooms", "number_of_bathrooms", "number_of_bedrooms") 
-
-stargazer(as.data.frame(InternalVariables), type="text", digits=1, title = "Descriptive Statistics for Philadelphia Homes Internal Variables (Figure 4.1)", out = "Training_PHLInternal.txt")
-```
-
-```{r}
-DemographicVariables <- data 
-
-DemographicVariables <- st_drop_geometry(DemographicVariables)
-
-DemographicVariables <- DemographicVariables %>%
-  dplyr::select("PctWhite", "PctBlack", "PctHispanic", "PctBachelors", "PctPoverty", "med_income") 
-
-stargazer(as.data.frame(DemographicVariables), type="text", digits=1, title = "Descriptive Statistics for Philadelphia Homes Spatial Variables (Figure 4.1)", out = "Training_PHLSpatial.txt")
-```
 ```{r fig.align="center", warning=FALSE, echo = FALSE, fig.width = 14}
 options(scipen = 9999) #turns off scientific notation and how many points
 
@@ -1055,14 +1144,92 @@ st_drop_geometry(Variable) %>%
      plotTheme()
 ```
 
-## title
+
+
+
+## testing correlations
+
+```{r}
+internalvariables <- c(
+  "sale_price", "PricePerSqft", "total_livable_area", "number_of_rooms", "number_of_bathrooms", "number_of_bedrooms", "BuildingAge", "frontage", "depth", "fireplaces", "BasementPresent", "GaragePresent", "exterior_condition", "number_stories", "central_air"
+)
+
+numericintVars <- data %>%
+  st_drop_geometry(data) %>%
+  select(internalvariables)%>%
+  na.omit()
+
+ggcorrplot(
+  round(cor(numericintVars), 1), 
+  p.mat = cor_pmat(numericintVars),
+  colors = c('#d7191c','#ffffbf','#2c7bb6'),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across internal variables") 
+
+```
+
+```{r}
+demvariables <- c(
+  "sale_price", "PctWhite", "PctBlack", "PctHispanic", "PctBachelors", "PctPoverty", "med_income",
+  
+  "med_rent", "owner_units",         "renter_units" 
+        , "same_house_75" 
+       ,  "same_house_1" 
+      ,   "monthly_costs_no_mortgage" 
+      ,   "monthly_costs_with_mortgage" 
+        , "med_gross_rent"     
+        , "housing_units_with_heat" 
+        , "edu_bachelors" 
+       ,  "pop_below_poverty" 
+       ,  "housing_units_high_speed_internet" 
+       ,  "housing_units_no_vehicle"       
+  )
+
+numericdemVars <- data %>%
+  st_drop_geometry(data) %>%
+  select(demvariables)%>%
+  na.omit()
+
+ggcorrplot(
+  round(cor(numericdemVars), 1), 
+  p.mat = cor_pmat(numericdemVars),
+  colors = c('#d7191c','#ffffbf','#2c7bb6'),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across Demographic variables") 
+
+```
+```{r}
+spatvariables <- c("sale_price", "dist_to_nearest_school", "dist_to_nearest_pvt_school", "dist_to_nearest_landmark", "dist_to_comm_corr", "dist_to_nearest_station", "dist_to_nearest_trail", "dist_to_nearest_police_station","crime_nn5", "litter", "within_com_corr", "within_flood", "dist_to_floodplain", "dist_to_nearest_tenniscourt", "dist_to_nearest_playground", "dist_to_nearest_pool", "total_livable_area"     
+  )
+
+numericspatVars <- data %>%
+  st_drop_geometry(data) %>%
+  select(all_of(spatvariables))%>%
+  na.omit()
+
+ggcorrplot(
+  round(cor(numericspatVars), 1), 
+  p.mat = cor_pmat(numericspatVars),
+  colors = c('#d7191c','#ffffbf','#2c7bb6'),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across Spatial variables") 
+
+```
+
+
+justify choice of varibales here 
 
 
 ```{r}
 
-variables <- c(
-  "sale_price", "number_of_bathrooms", "PricePerSqft","dist_to_nearest_pvt_school", "dist_to_comm_corr", "dist_to_nearest_station", "dist_to_nearest_trail", "med_income", "dist_to_nearest_pool", "frontage", "central_air", "fireplaces", "BasementPresent", "exterior_condition", "PctWhite", "PctBlack", "total_livable_area", "BuildingAge",  "total_livable_area", "PctBachelors", "PctPoverty"
-)
+#variables <- c("sale_price", "number_of_bathrooms","dist_to_nearest_pvt_school", "dist_to_comm_corr", "dist_to_nearest_station", "dist_to_nearest_trail", "med_income", "dist_to_nearest_pool", "frontage", "central_air", "fireplaces", "BasementPresent", "exterior_condition", "PctWhite", "PctBlack", "total_livable_area", "BuildingAge",   "PctBachelors", "PctPoverty", "PricePerSqft","total_livable_area", "housing_units_with_heat", "PctHispanic", "housing_units_high_speed_nternet")
+
+variables <- c ("sale_price" ,"total_livable_area","number_of_bathrooms", "fireplaces", "exterior_condition", "central_air", "PctWhite", "med_income", "monthly_costs_with_mortgage" , "PctPoverty", "dist_to_floodplain", "within_com_corr")
+
+#dropping crime for now check later 
 
 numericVars <- data %>%
   st_drop_geometry(data) %>%
@@ -1076,28 +1243,11 @@ ggcorrplot(
   type="lower",
   insig = "blank") +  
     labs(title = "Correlation across numeric variables") 
-#  plotTheme()
 ```
 
 # Regressions
 
-```{r}
 
-#not sure if all this is needed
-
-#here we do it with the complete dataset for some reason? 
-
-reg1 <- lm(sale_price ~ ., data = st_drop_geometry(data) %>%  
-             #dplyr::filter(toPredict == "MODELLING") %>%
-                                 dplyr::select(variables))
-
-summary(reg1)
-
-# pretty regression
-
-print(stargazer(reg1, type="text", digits=1, title="Linear Model of Training Dataset (Figure 5)", out = "Training LM.txt"))
-
-```
 
 ```{r}
 
@@ -1121,8 +1271,9 @@ test_data <- modelling_data[!split,]
 reg2 <- lm(sale_price ~ ., data = st_drop_geometry(train_data) %>%  
                                  dplyr::select(variables))
 
-## Plot regression (didnt work)
-# effect_plot(reg2, pred = total_livable_area, interval = TRUE, plot.points = TRUE)
+## Plot regression 
+effect_plot(reg2, pred = number_of_bathrooms, interval = TRUE, plot.points = TRUE)
+plot_summs(reg2, scale = TRUE)
 
 
 test_data <-
@@ -1141,15 +1292,14 @@ test_data <-
 MAE <- data.frame(mean(test_data$Price.AbsError, na.rm = T))
 MAPE <- data.frame(mean(test_data$Price.APE, na.rm = T)) #MAPE
 
-reg.MAE.MAPE <- 
-  cbind(MAE, MAPE) %>%
-  kable(caption = "Regression MAE & MAPE (Figure 5.1)") %>%
-  kable_styling("striped",full_width = F) 
+
+reg.MAE.MAPE <- cbind(MAE, MAPE) %>%
+  kable(format = "html", caption = "Regression MAE & MAPE (Figure 5.1)", col.names = c("Mean Absolute Error", "Mean Absolute Percentage Error")) %>%
+  kable_styling("striped", full_width = FALSE)
 
 reg.MAE.MAPE
 
 ```
-
 
 ```{r}
 
@@ -1160,7 +1310,7 @@ test_data <-
 ## K-Fold: Generalizability Cross-Validation
 
 fitControl <- trainControl(method = "cv", number = 100)
-set.seed(369)
+set.seed(999)
 
 reg.cv <- 
   train(sale_price ~ ., data = st_drop_geometry(test_data) %>% 
@@ -1184,11 +1334,12 @@ stargazer(as.data.frame(reg.cv$resample), type="text", digits=1, title="Cross Va
 #plotting the cross validation stuff
 
 ggplot(reg.cv$resample, aes(x=MAE)) +
-  geom_histogram(fill = "blue") +
+  geom_histogram(fill = "#2c7bb6") +
   labs(title = "Cross Validation Tests in Mean Average Error", caption="Figure 5.3") +
   plotTheme()
 
 ```
+
 ```{r}
 
 test_data %>%
@@ -1201,7 +1352,9 @@ test_data %>%
               method = "lm", se = FALSE, size = 1, colour="#2c7bb6") +
   labs(title="Predicted Sale Price as a Function of Observed Price",
        subtitle="Red line represents a perfect prediction; Blue line represents prediction",
-       caption = "Figure 6.2") +
+       caption = "Figure 6.2",
+       x = "Observed Price",
+       y = "Predicted Price") +
   plotTheme()
 ```
 
@@ -1214,33 +1367,46 @@ test_data %>%
 # Spatial Lag for price
 coords <- st_coordinates(test_data) 
 neighborList <- knn2nb(knearneigh(coords, 5))
-spatialWeights <- nb2listw(neighborList, style="W", zero.policy = TRUE)
+spatialWeights <- nb2listw(neighborList, style="W")
 test_data$lagPrice <- lag.listw(spatialWeights, test_data$sale_price)
 
-test_data <- test_data %>%
-  mutate(lagPriceError = lag.listw(spatialWeights, Price.Error, NAOK = TRUE))
+test_data$lagPriceError <- lag.listw(spatialWeights, test_data$Price.Error, NAOK = TRUE)
 
 # Filtering greater than 0 values
 
 test_data_filter <- test_data %>%
   filter(Price.Error > 0, lagPriceError > 0)
 
-# Moran's I
-
-ggplot(data = test_data, aes(lagPriceError, Price.Error)) +
+ggplot(data = test_data_filter, aes(lagPriceError, Price.Error)) +
   geom_point(size = .85,colour = "black") + 
   geom_smooth(method = "lm",colour = "red",size = 1.2) +
   labs(title="Price Errors",
        caption = "Figure 6.1") +
   plotTheme()
 
-moranTest <- moran.mc(na.omit(test_data$Price.Error),
+```
+
+```{r}
+
+# for morans 1
+
+# Spatial Lag for price
+coords <- st_coordinates(test_data_filter) 
+neighborList <- knn2nb(knearneigh(coords, 5))
+spatialWeights <- nb2listw(neighborList, style="W")
+test_data_filter$lagPrice <- lag.listw(spatialWeights, test_data_filter$sale_price)
+
+test_data_filter$lagPriceError <- lag.listw(spatialWeights, test_data_filter$Price.Error, NAOK = TRUE)
+
+
+
+moranTest <- moran.mc(na.omit(test_data_filter$Price.Error),
                       spatialWeights, nsim = 999)  
 
 ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
-  geom_histogram(binwidth = 0.07) +
+  geom_histogram(binwidth = 0.005) +
   geom_vline(aes(xintercept = moranTest$statistic), colour = "#d7191c",size=1) +
-  scale_x_continuous(limits = c(-1,1)) +
+  scale_x_continuous(limits = c(-0.5,0.5)) +
   labs(title="Observed and permuted Moran's I",
        subtitle= "Observed Moran's I in red",
        caption = "Figure 6.3",
@@ -1248,7 +1414,6 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
        y="Count") +
   plotTheme()
 ```
-
 
 ```{r}
 ggplot() +
@@ -1307,9 +1472,8 @@ test_data <-
 test_data <-
   test_data %>%
   group_by(census_tract) %>%
-  mutate(MAPE = mean(Price.APE)) 
-
-#This now seems correct versus the old version - woo! 
+  mutate(MAPE = mean(Price.APE)) %>%
+  filter(MAPE> -100)
 
 ggplot(test_data) +
   geom_point(aes(MeanPrice, MAPE)) +
@@ -1318,6 +1482,33 @@ ggplot(test_data) +
        x = "Mean Home Price", y = "MAPE",
        caption = "Figure 7.5") +
   plotTheme()
+```
+
+# Prediction Challenge 
+
+```{r}
+
+#for prediction 
+
+reg1 <- lm(sale_price ~ ., data = st_drop_geometry(data_og) %>%  
+             dplyr::filter(toPredict == "MODELLING") %>%
+                                 dplyr::select(variables))
+
+data_pred <- st_drop_geometry(data_og)%>%
+  filter(toPredict== "CHALLENGE")
+  
+data_pred <-
+  data_pred %>%
+  mutate(Price.Predict = predict(reg1,data_pred))
+
+final_pred <- st_drop_geometry(data_pred)%>%
+  select(musaID,Price.Predict)%>%
+  mutate(team = "Sam and Roshini")
+
+# pretty regression
+
+print(stargazer(reg1, type="text", digits=1, title="Linear Model of Training Dataset (Figure 5)", out = "Training LM.txt"))
+
 ```
 
 
