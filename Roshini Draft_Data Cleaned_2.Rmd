@@ -17,9 +17,25 @@ The Philadelphia housing market is a dynamic and diverse landscape influenced by
 
 <img src="./images/33rd-Street-Corner-of-West-Lehigh-Ave.jpg" width="300" align="right" style="display: inline; margin: 0 10px;"/>
 
-Housing prices in Philadelphia have experienced fluctuations over the years, influenced by a combination of local and national factors. However, it's important to note that these prices can vary significantly based on factors such as the neighborhood, property type, and condition of the home. This project aims to evaluate the various factors affecting housing prices and create an accurate and generalizable OLS regression model to predict the housing prices in Philadelphia.
+Significance of project
+
+Housing prices in Philadelphia have experienced fluctuations over the years, influenced by a combination of local and national factors. However, it's important to note that these prices can vary significantly based on factors such as the neighborhood, property type, and condition of the home. 
+
+Sale prediction algorithms are powerful tools that offer benefits to a wide range of stakeholders in the housing market. They promote informed decision-making, uncover inequalities, and contribute to the overall health and fairness of the real estate market.
+
+This project builds on this theory and aims to evaluate the various factors affecting housing prices to create an accurate and generalizable OLS regression model to predict the housing prices in Philadelphia.
+
+Key challenges
+
+Building a predictive model for property valuation is difficult given the intricacies involved in data processing and interpretation.  It involves sorting through lots of data, choosing the right features, understanding the nuanced influence of neighborhood characteristics, addressing collinearity among variables, selecting appropriate modeling techniques, evaluating model performance, ensuring interpretability, and building a generalizable model. 
+
+## Process
 
 The process of creating this model was extremely iterative, and involved multiple rounds of trial and error, particularly in attempts to minimize the errors in predictions. The maps, correlation matrix and scatterplots are all illustrative of variables that were considered, wrangled and filtered as part of the data analysis process.  
+
+## Summary of Results
+
+The model exhibits moderate generalizability, however, the presence of notably high errors raises concerns about its predictive accuracy. In our process of experimentation, we were able to predict approximately 70% of the variance in sale prices, which is a reasonable level of explanatory power for a regression model. The errors across the model seem to be dispersed and do not display any significant spatial auto-correlation. 
 
 This code is built upon the classwork discussed [here](https://github.com/mafichman/musa_5080_2023/tree/main).
 
@@ -86,9 +102,9 @@ Census, OpenData Philly and provided Dataset
 
 ## Provided Dataset and Internal Variables 
 
-Provided dataset was messy and incomplete
+The code below is used to import the foundational dataset for our model. This dataset contains information on home sales prices and property characteristics in Philadelphia, Pennsylvania for the years 2022 and 2023. The model we are developing is designed to make predictions about home prices and utilizes specific property attributes from this dataset to enhance the accuracy of those predictions.
 
-Data provided was cleaned 
+The code demonstrates data manipulation using the dplyr package to refine the dataset by selecting specific columns and filtering rows based on criteria. These operations are carried out because the raw dataset is untidy and incomplete. The original dataset is further modified by filtering rows specific to Philadelphia City and by excluding certain columns with a majority of missing values.
 
 ```{r Reading Data, results= 'hide'}
 
@@ -107,7 +123,8 @@ data <-  data %>%
 ```
 ### Categorical Variables 
 
-making binaries from categoricals etc 
+The next step is predominantly focused on data cleaning and transformation based on the information given in the metadata for the dataset by the City of Philadelphia. Overall, this code aims to clean and categorize various columns in the dataset. It does this by handling missing values as well as assigning categories and binary values for better analysis and modeling.
+
 
 ```{r Cleaning Data based on Metadata, results= 'hide'}
 
@@ -289,7 +306,11 @@ data$parcel_shape[is.na(data$parcel_shape)] <- 0
 
 ### Imputing Missing Data 
 
-Making regressions and ffilling in missing varibales for 
+An initial analysis of the dataset indicated missing values for a number of rows within important factors that inform sale prices such as number of bedrooms, number of bathrooms, and number of rooms. A linear regression model is used to predict these missing values based on the relationships observed in the available data. 
+
+In the given dataset, a strong relation is observed between number of rooms and total livable area. Here, the linear relationship between these two factors are studied across the dataset and projected to the rows with the missing values. The assumption here is that, when plotted on a graph, the missing values will have the same slope and intercept as the rest of the dataset. 
+
+This imputing practice is extended to other fields with missing values such as number of bathrooms and number of bedrooms.
 
 #### Bedrooms
 
@@ -394,6 +415,8 @@ data$number_of_bathrooms <- round(data$number_of_bathrooms, digits=0)
 
 ### Creating New Variables 
 
+Post cleaning, two new variables are created within the dataset to evaluate the price per square foot within sold properties as well as the age of the sold properties. 
+
 ```{r Price/Sqfta, warning=FALSE, results='hide'}
 
 data <- 
@@ -407,6 +430,9 @@ data <-
 ```
 
 ### Dropping Columns and Outliers 
+
+As the last step, the foundational dataset carrying information about the properties is filtered to only hold the indicative internal variables which may play a role in influencing the home price value. To achieve better accuracy and fewer errors in prediction, outlier values in the dataset are eliminated to remove any significant skews in the dataset.
+
 
 ```{r filter data, warning=FALSE, results='hide'}
 
@@ -425,16 +451,9 @@ data <-  data %>%
 
 ## Census Data
 
-The years chosen for analysis are 2021 because covid recovery most recent to mkae more acccurate predicitons
+After cleaning the primary dataset and importing data on surrounding physical amenities, the next step is gathering relevant census data to understand demographic conditions pertaining to these data points. The provided R code chunk fetches and processes data from the American Community Survey (ACS) for Philadelphia census tracts in the year 2021. It retrieves various demographic and socioeconomic variables for these tracts and performs some data transformations. The year chosen for analysis is 2021 to factor recovery from Covid in order to make more accurate predictions. 
 
-
-The variables chosen for this analysis include: 
-
-1. income because - 
-
-2. 
-
-3. 
+A list of variables including population, income, housing-related information, education, poverty levels, and racial/ethnic demographics are gathered and transformed to be projected in the ESRI:102728 coordinate system. This information is stored in a new dataset - 'tracts21'.
 
 
 ```{r census, cache=TRUE, warning=FALSE, results= 'hide'}
@@ -501,9 +520,7 @@ tracts21 <- tracts21 %>% st_transform(st_crs(data))
 
 ## Open Data philly 
 
-private schools proximity, parks and landmarks, floodplains, daily arrests, litter score, heat index
-
-philly rising boundaries? 
+To begin constructing a predictive model for the Philadelphia housing market, additional external variables are incorporated. These variables examine the proximity of various amenities and public services to the homes listed in the foundational dataset. The following code imports data related to these potentially influential amenities, including information about the locations of public and private schools, colleges, city landmarks, playgrounds, trails, tennis courts, pools, transit stops and police stations. Additionally, information on potential home value inhibitors such as litter, proximity to the floodplain and instances of gun violence are also brought in. These datasets are sourced from [Open Data Philly.](https://data-phl.opendata.arcgis.com/)
 
 ```{r Adding Data, warning=FALSE, results= 'hide'}
 
@@ -781,6 +798,12 @@ data$dist_to_nearest_police_station <- rsgeo::distance_euclidean_pairwise(x, y[n
 
 ```
 
+A distance analysis is performed for each of the above amenities in relation to our home value dataset to identify the nearest amenity of each kind to each house in the original dataset. This analysis is conducted as a preparatory step, the distances derived from this analysis are studied next to determine if these spatial factors play a role in influencing home prices.
+
+### K Nearest Neighbors 
+
+In order to evaluate the instances of gun violence around a listed home, the method of k-Nearest Neighbors Analysis is used. In this case, a higher value of k=5 is preferred to account for the spatial distribution of the instances in relation to the homes and to ensure that there are enough neighbor observations for each listed home for better balance across the dataset. A higher k value is also preferred for the robustness and higher generalizability it offers during prediction.
+
 ```{r}
 # Philadelphia Shootings
 ## Adding data on Philadelphia Shootings
@@ -816,7 +839,13 @@ tracts21 <-
 
 ```
 
-```{r}
+
+## Joining Data 
+
+In order to begin conducting exploratory analyses of the relations within the dataset, the foundational dataset is joined with the datasets containing relevant spatial and demographic attributes.
+
+
+```{r census join}
 
 # joining census data
 
@@ -825,7 +854,7 @@ data <-
 
 ```
 
-```{r}
+```{r save for prediction}
 
 #saving for prediction 
 
@@ -839,7 +868,14 @@ data <- data %>%
 
 # Exploratory Data Analysis
 
-```{r}
+Provided below are the summary statistics for the different types of variables considered (internal, spatial, and demographic). The exploration further looks at the distribution of non-numeric categorical variables through bar plots. It finally inspects the dependence of 'home sale price' on other continuous independent variables including total area, median income, and racial distribution among others. 
+
+## Summary Statistics: Internal Variables
+
+These statistics provide an overview of the central tendency, spread, and range of the internal variables for Philadelphia homes, which include sale prices, price per square foot, living area size, year built, number of rooms, number of bathrooms, and number of bedrooms.
+
+
+```{r summ stat int}
 InternalVariables <- data 
 
 InternalVariables <- st_drop_geometry(InternalVariables)
@@ -850,7 +886,18 @@ InternalVariables <- InternalVariables %>%
 stargazer(as.data.frame(InternalVariables), type="text", digits=1, title = "Descriptive Statistics for Philadelphia Homes Internal Variables (Figure 4.1)", out = "Training_PHLInternal.txt")
 ```
 
-```{r}
+It is observed that the average sale price of homes in Philadelphia is approximately 282,857.8 USD. The sale prices vary quite widely with a high standard deviation, indicating significant dispersion in prices. It is also observed that the average livable area in Philadelphia is approximately 1334 sqft with the price per square foot for homes positioned at about 209.3 USD. 
+
+The average age for a house in Philadelphia is approximately 85 years indicating a large share of the market is held by homes constructed over a century ago. 
+
+Finally, homes in Philadelphia on average seem to have 6 rooms overall with approximately 3 bedrooms and 1 bathroom. 
+
+## Summary Statistics: Demographic Variables
+
+These statistics provide an overview of the central tendency, spread, and range of the internal variables for Philadelphia homes, which include median income, percentage of white population, percentage of black population, percentage of hispanic population, percentage of population with a bachelor's degree and percentage of population living in poverty.
+
+
+```{r summ stat dem}
 DemographicVariables <- data 
 
 DemographicVariables <- st_drop_geometry(DemographicVariables)
@@ -860,7 +907,19 @@ DemographicVariables <- DemographicVariables %>%
 
 stargazer(as.data.frame(DemographicVariables), type="text", digits=1, title = "Descriptive Statistics for Philadelphia Homes Demographic Variables (Figure 4.1)", out = "Training_PHLSpatial.txt")
 ```
-```{r}
+
+The table presents descriptive statistics for demographic variables related to Philadelphia homes, offering insights into the characteristics of the population in different areas.
+
+On average, approximately 44.1% of the population in the observed areas is White. The range of White population percentages spans from 0.0% to 95.7%, indicating a wide diversity in racial composition across different areas of Philadelphia. The same holds true for Black and Hispanic population percentages indicating the presence of White-majority, Black majority and Hispanic majority neighborhoods in different parts of Philadelphia. On average, about 14.1% of the population in the observed areas holds a Bachelor's degree or higher.
+
+The average median household income in the observed areas is $61,320.0. However, approximately 20.4% of the population in the observed areas falls below the poverty level, on average.
+
+## Summary Statistics: Spatial Variables
+
+These statistics provide an overview of the central tendency, spread, and range of the internal variables for Philadelphia homes, which include distances to key nearest amenities and threatening activities including nearest schools, nearest private schools, nearest landmarks, nearest commercial corridors, nearest trails, nearest police stations, and nearest crime instances.
+
+
+```{r summ stat spat}
 
 SpatialVariables <- data 
 
@@ -871,8 +930,13 @@ SpatialVariables <- SpatialVariables %>%
 
 stargazer(as.data.frame(SpatialVariables), type="text", digits=1, title = "Descriptive Statistics for Philadelphia Homes Spatial Variables (Figure 4.1)", out = "Training_PHLSpatial.txt")
 ```
+These statistics offer insights into the spatial characteristics of Philadelphia neighborhoods where the "Mean" in each case represents the average distance to a specific amenity from a listed property. 
 
-```{r fig.height=20, fig.width=14}
+## Plotting Categorical Variables 
+
+The following exploratory analysis plot, titled "Price as a function of Categorical Variables," is a set of grouped bar charts. Each chart corresponds to a selected categorical variable, and within each chart, different categories of that variable are compared based on their influence on the sale price of homes. This visualization helps assess how each categorical variable relates to home sale prices and allows for visual comparison across categories. This allows a clear comparison of multiple categorical variables at once, making it easier to identify trends and patterns in the data.
+
+```{r cat plot, fig.height=20, fig.width=14}
 CategoricalVariables <- data 
 CategoricalVariables <- st_drop_geometry(CategoricalVariables)
 CategoricalVariables <- CategoricalVariables %>%
@@ -889,10 +953,11 @@ CategoricalVariables %>%
 ```
 
 
+# Exploratory Mapping and Analysis 
 
 ## Mapping Internal Variables
 
-```{r}
+```{r map int}
 
 ##Mapping Internal Variables
 # Mapping sale price
@@ -940,7 +1005,7 @@ ggplot() +
 
 ## Mapping Spatial Variables
 
-```{r}
+```{r map spat}
 ## Mapping Spatial Variables
 
 # Mapping properties around schools
@@ -1021,9 +1086,7 @@ ggplot() +
 
 ## Mapping Demographic Variables
 
-
-
-```{r}
+```{r map dem}
 ## Mapping Demographic Variables
 
 # Mapping median income around sold properties
@@ -1122,10 +1185,13 @@ ggplot() +
 
 
 
-## Scatterplots
+# Scatterplots and Correlations 
 
+## Scatterplots 
 
-```{r fig.align="center", warning=FALSE, echo = FALSE, fig.width = 14}
+The following code generates a set of scatterplots to explore the relationships between the sale price of homes and various continuous variables.  The data is first filtered to exclude observations where the sale_price is less than 10,000,000 to remove any outliers. For the remaining data, a set of scatterplots is created. Each scatterplot examines how the sale_price relates to different continuous variables. The scatterplots help visualize the relationships between the sale price of homes and each of the continuous variables, as well as the direction and strength of these relationships. The regression lines indicate whether there is a linear trend in the data.
+
+```{r scatterplots, fig.align="center", warning=FALSE, echo = FALSE, fig.width = 14, fig.height=28 }
 options(scipen = 9999) #turns off scientific notation and how many points
 
 Variable <- data %>%
@@ -1138,18 +1204,25 @@ st_drop_geometry(Variable) %>%
   gather(Variable, Value, -sale_price) %>% 
    ggplot(aes(Value, sale_price)) +
      geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
-     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     facet_wrap(~Variable, ncol = 2, scales = "free") +
      labs(title = "Price as a function of continuous variables", 
           caption="Figure 4.1") +
      plotTheme()
 ```
 
+## Correlations
 
+The process of variable selection for the model was an iterative one, beginning with an initial exploration of inter-variable relationships. Following our strategy of categorizing variables into three overarching groups—Internal, Spatial, and Demographic—we proceeded to evaluate and visualize the correlations between these variables and the `sale_price`. Broadly speaking, we observed that internal and demographic variables exhibited the most pronounced correlations with `sale_price`, with only a limited number of spatial variables demonstrating noteworthy associations with the independent variables `sale_price`.
 
+### Correlation Matrix: Internal Variables
 
-## testing correlations
+For this step, a list of important internal variables for real estate, like sale price, property size, and various features, is defined in the 'internalvariables' list. The code then processes the data, picking out only the numbers from these internal variables and removing any rows with missing data. After that, it calculates how these internal variables are related to each other using a correlation matrix.
 
-```{r}
+Upon analyzing the results, we observe that variables such as price per square foot, number of rooms, and total livable area exhibit strong correlations with the sale price. However, it's essential to keep in mind that the price per square foot is derived from the sale price, which explains the high correlation. Similarly, for the number of rooms and number of bedrooms, considering the imputations made earlier in this analysis, it becomes a questionable choice to include them in the final regression analysis due to the high number of missing values and the general uncertainty surrounding the assigned values, especially given the high correlation with another variable, `total_living_area`, which is already included in the analysis.
+
+The final internal variables selected for this analysis include: `total_livable_area`,`number_of_bathrooms`, `fireplaces`, `exterior_condition`, and `central_air`.
+
+```{r corr int}
 internalvariables <- c(
   "sale_price", "PricePerSqft", "total_livable_area", "number_of_rooms", "number_of_bathrooms", "number_of_bedrooms", "BuildingAge", "frontage", "depth", "fireplaces", "BasementPresent", "GaragePresent", "exterior_condition", "number_stories", "central_air"
 )
@@ -1165,11 +1238,43 @@ ggcorrplot(
   colors = c('#d7191c','#ffffbf','#2c7bb6'),
   type="lower",
   insig = "blank") +  
-    labs(title = "Correlation across internal variables") 
+    labs(title = "Correlation across Internal Variables") 
 
 ```
 
-```{r}
+
+### Correlation Matrix: Spatial Variables
+
+Unexpectedly, during our analysis, we discovered that there were relatively few strong positive or negative correlations among the spatial elements we examined. Unlike the demographics and internal variables, which demonstrated significant influence on the sale price, these spatial factors seemed to have less impact. Despite our best efforts and attempts to be innovative in our variable selection, the overall correlations appeared to be less pronounced in this context. This observation might also be linked to the absence of error clustering that we identified later in our analysis. If time was no contraint, we would have explored other spatial varibles further, hoping to find more statistically significant ones.  
+
+
+```{r corr spat}
+spatvariables <- c("sale_price", "dist_to_nearest_school", "dist_to_nearest_pvt_school", "dist_to_nearest_landmark", "dist_to_comm_corr", "dist_to_nearest_station", "dist_to_nearest_trail", "dist_to_nearest_police_station","crime_nn5", "litter", "within_com_corr", "within_flood", "dist_to_floodplain", "dist_to_nearest_tenniscourt", "dist_to_nearest_playground", "dist_to_nearest_pool"  
+  )
+
+numericspatVars <- data %>%
+  st_drop_geometry(data) %>%
+  select(all_of(spatvariables))%>%
+  na.omit()
+
+ggcorrplot(
+  round(cor(numericspatVars), 1), 
+  p.mat = cor_pmat(numericspatVars),
+  colors = c('#d7191c','#ffffbf','#2c7bb6'),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across Spatial Variables") 
+
+```
+
+### Correlation Matrix: Demographic Variables
+
+
+In this section of the code, we compile a list of significant demographic variables, including factors such as racial composition, educational attainment, income levels, housing, and more. Upon analyzing the results, the generated correlation plot illustrates how these demographic factors interrelate. 
+
+In our analysis, we observe a nearly pure negative correlation between 'percent white' and 'percent black.' To mitigate multicollinearity, we recommend including only one of these variables in the final model. 'Median income' displays a robust and highly positive correlation with 'sale price,' making it a valuable addition to the model, given its strong predictive power. Similarly, 'monthly cost,' which represents the cost of utilities per month in houses with a mortgage, exhibits a noteworthy positive correlation with 'sale price,' making it another worthy inclusion in the final model, as it promises to enhance our predictive capabilities.
+
+```{r corr dem}
 demvariables <- c(
   "sale_price", "PctWhite", "PctBlack", "PctHispanic", "PctBachelors", "PctPoverty", "med_income",
   
@@ -1197,33 +1302,15 @@ ggcorrplot(
   colors = c('#d7191c','#ffffbf','#2c7bb6'),
   type="lower",
   insig = "blank") +  
-    labs(title = "Correlation across Demographic variables") 
-
-```
-```{r}
-spatvariables <- c("sale_price", "dist_to_nearest_school", "dist_to_nearest_pvt_school", "dist_to_nearest_landmark", "dist_to_comm_corr", "dist_to_nearest_station", "dist_to_nearest_trail", "dist_to_nearest_police_station","crime_nn5", "litter", "within_com_corr", "within_flood", "dist_to_floodplain", "dist_to_nearest_tenniscourt", "dist_to_nearest_playground", "dist_to_nearest_pool", "total_livable_area"     
-  )
-
-numericspatVars <- data %>%
-  st_drop_geometry(data) %>%
-  select(all_of(spatvariables))%>%
-  na.omit()
-
-ggcorrplot(
-  round(cor(numericspatVars), 1), 
-  p.mat = cor_pmat(numericspatVars),
-  colors = c('#d7191c','#ffffbf','#2c7bb6'),
-  type="lower",
-  insig = "blank") +  
-    labs(title = "Correlation across Spatial variables") 
+    labs(title = "Correlation across Demographic Variables") 
 
 ```
 
+### Final Variable Selection
 
-justify choice of varibales here 
+Based on our initial correlation analyses, we went through an iterative process to determine the final set of metrics for our model. The code initially included some variables we considered, but to minimize errors like MAPE and MAE while maximizing accuracy, we made some substitutions. We also aimed to enhance the model's generalizability by carefully choosing and rejecting specific variables. Finally, we settled on the variables presented. This comprehensive approach allowed us to tailor our model's variable selection to not only reduce errors but also ensure the model's applicability to a wide range of scenarios, ultimately contributing to more robust and dependable results in our regression analysis.
 
-
-```{r}
+```{r corr all}
 
 #variables <- c("sale_price", "number_of_bathrooms","dist_to_nearest_pvt_school", "dist_to_comm_corr", "dist_to_nearest_station", "dist_to_nearest_trail", "med_income", "dist_to_nearest_pool", "frontage", "central_air", "fireplaces", "BasementPresent", "exterior_condition", "PctWhite", "PctBlack", "total_livable_area", "BuildingAge",   "PctBachelors", "PctPoverty", "PricePerSqft","total_livable_area", "housing_units_with_heat", "PctHispanic", "housing_units_high_speed_nternet")
 
@@ -1245,11 +1332,15 @@ ggcorrplot(
     labs(title = "Correlation across numeric variables") 
 ```
 
-# Regressions
+# OLS Regresssion Model
 
+This code utilizes an OLS regression model to make accurate predictions about home prices. The advantage of an OLS model is its simplicity and ease of interpretation, making it a valuable tool for understanding linear relationships between variables.
 
+## Testing and Training Data 
 
-```{r}
+First we split the modelling data into training and testing sets, ensuring that the data is split randomly each time. 
+
+```{r splitdata}
 
 ## Creating the training and test set
 modelling_data <- data %>% filter(toPredict == "MODELLING")
@@ -1264,17 +1355,39 @@ train_data <- modelling_data[split,]
 test_data <- modelling_data[!split,]
 ```
 
-```{r}
+## Regression Analysis
+
+After running the regression analysis, we were able to come to some interesting relations between the sale price and different variables used in the analysis. 
+
+1. The coefficients for 'total_livable_area,' 'number_of_bathrooms,' 'fireplaces,' 'exterior_condition,' 'central_air,' 'PctWhite,' 'med_income,' 'monthly_costs_with_mortgage,' and 'within_com_corr' are all statistically significant. 
+
+2. Total Livable Area (total_livable_area): The coefficient of approximately 182.44 suggests that, for each additional unit of livable area, the 'sale_price' is expected to increase by around 182.44 units, provided that all other variables remain constant. This indicates a strong positive relationship between the size of the property and its sale price.
+
+3. Number of Bathrooms (number_of_bathrooms): With a coefficient of approximately 58659.04, each additional bathroom is associated with a substantial increase in 'sale_price.' This implies that properties with more bathrooms tend to command higher prices.
+
+4. Exterior Condition (exterior_condition): The coefficient of around -21749.80 signifies that, as the condition of the exterior deteriorates, 'sale_price' tends to decrease. This negative coefficient suggests that a well-maintained exterior has a positive impact on the property's value.
+
+5. Monthly Costs with Mortgage (monthly_costs_with_mortgage): The coefficient of approximately 141.14 suggests that an increase in utility costs per month on houses with a mortgage leads to a higher 'sale_price.' This indicates that buyers may be willing to pay more for properties associated with higher monthly costs, possibly due to perceived value or amenities.
+
+6. Within Community Correlation (within_com_corr): With a coefficient of roughly 35629.83, a higher within-community correlation is associated with an increase in 'sale_price.' This implies that properties in areas where housing prices are positively correlated tend to command higher prices, reflecting the desirability of such neighborhoods.
+
+We also then use the regression to predict home prices for the testing dataset, to then perform accuracy and generalizablity tests on it to refine the regression and clean and filter the dataset. We did this over and over, in order to choose the variables that made the most accurate and generalizable model. 
+
+
+```{r reg}
 
 #regression on training data
 
 reg2 <- lm(sale_price ~ ., data = st_drop_geometry(train_data) %>%  
                                  dplyr::select(variables))
 
+summary(reg2)
+
 ## Plot regression 
-effect_plot(reg2, pred = number_of_bathrooms, interval = TRUE, plot.points = TRUE)
+#effect_plot(reg2, pred = number_of_bathrooms, interval = TRUE, plot.points = TRUE)
 plot_summs(reg2, scale = TRUE)
 
+#predicting price for testing data
 
 test_data <-
   test_data %>%
@@ -1284,6 +1397,10 @@ test_data <-
          Price.APE = (abs(Price.Predict - sale_price)) / Price.Predict)
 
 ```
+
+## Error Analysis: Accuracy 
+
+The mean absolute error (MAE) for our model is currently approximately `$73,000`, and the Mean Absolute Percentage Error (MAPE) stands at around 28%. We experimented with various variable combinations to reduce these metrics, and we managed to achieve results close to `$20,000` (with a MAPE of 3%) by incorporating variables like "PricePerSqFT." However, including these variables, which are derived from the provided sale_price, led to an overfit model that lacked generalizability – a crucial requirement for our application. Additionally, to predict home prices effectively, we must avoid using variables derived from home prices themselves, as this would create a convoluted and self-referential model.
 
 ```{r}
 # table of MAE and MAPE
@@ -1301,6 +1418,12 @@ reg.MAE.MAPE
 
 ```
 
+# Generalizabilty 
+
+We used 100 folds for cross-validation. The high values of RMSE indicate that the model is being affected by outliers significantly. To address this issue, we conducted additional data cleaning and implemented outlier filtering techniques to minimize errors. However, the average RMSE value still remains above 100,000, making it relatively inaccurate for predicting home prices.
+
+The R-squared statistic represents the proportion of the variance in the sale prices that the model can explain. It ranges from 0.3 to 0.9, with a mean value of 0.7. A higher R-squared value indicates a better fit of the model to the data. On average, our model can explain approximately 70% of the variance in the data, indicating that it possesses a reasonable level of generalizability.
+
 ```{r}
 
 test_data <-
@@ -1317,18 +1440,11 @@ reg.cv <-
                                 dplyr::select(variables),
 method = "lm", trControl = fitControl, na.action = na.pass)
 
-#This needs to be work-shopped. It stopped working and I don't know why. The code without an object assigned also outputs.
-
-#reg.cv$resample[1:5,]
-
-#mean(reg.cv$resample[,3])
-
-#reg.cv$resample[7,]
-
-
 stargazer(as.data.frame(reg.cv$resample), type="text", digits=1, title="Cross Validation Results (5.2)", out = "CV.txt") #all cv
 
 ```
+
+Most of our MAE seem to be within the 60,000 dollar to 80,000 dollar range (with a mean of 71,000) which is illustrated in the following histogram.  
 
 ```{r}
 #plotting the cross validation stuff
@@ -1339,6 +1455,8 @@ ggplot(reg.cv$resample, aes(x=MAE)) +
   plotTheme()
 
 ```
+The predicted and observed prices look evenly distributed above and below the perfect prediction line, below the $50,000 line. Our model moves below the perfect prediction line beyond 50,000 dollars indicating that our model may be under-predicting the values of high value homes. 
+
 
 ```{r}
 
@@ -1355,8 +1473,10 @@ test_data %>%
        caption = "Figure 6.2",
        x = "Observed Price",
        y = "Predicted Price") +
-  plotTheme()
+  plotTheme()+ xlim(0, 2000000) + ylim(0, 2000000)
 ```
+
+# Spatial Correlations 
 
 ```{r}
 
@@ -1385,6 +1505,11 @@ ggplot(data = test_data_filter, aes(lagPriceError, Price.Error)) +
   plotTheme()
 
 ```
+
+## Moran's I 
+
+We observe a low Moran's I value, indicating that errors are dispersed across our data. This suggests that there is no significant clustering of errors, a pattern that is also evident in the map. Consequently, it is probable that errors in our model may stem from other demographic or internal variables that we may not have accounted for. To improve the accuracy of our analysis, further investigation and inclusion of these potentially omitted variables might be necessary.
+
 
 ```{r}
 
@@ -1423,7 +1548,8 @@ ggplot() +
   scale_colour_manual(values = palettee,
                    labels=qBr(test_data,"Price.AbsError"),
                    name="Quintile\nBreaks") +
-  labs(title="Map of Price Absolute Errors, Phill", 
+  labs(title="Map of Price Absolute Errors for Test Set", 
+       subtitle= "Philadelphia",
       caption="Figure 6.4") +
   mapTheme()
 ```
@@ -1436,30 +1562,80 @@ ggplot() +
   scale_colour_manual(values = palettee,
                    labels=qBr(test_data,"Price.Predict"),
                    name="Quintile\nBreaks") +
-  labs(title="predicted sale price", 
+  labs(title="Predicted Sale Price for Test Set", 
+       subtitle = "Philadelphia",
       caption="Figure 6.4") +
   mapTheme()
 ```
 
-```{r}
+# Differing Contexts 
+
+Here we try to observe trends of error and predictions within each census tract. We can see that the MAPE lies within a 0 to 1 range, and is higher in certain census tracts in North Philadelphia, indicating a potential missing spatial factor. 
+
+<img src="./images/Rplot01.png" width="500" align="center" style="display: inline; margin: 0 10px;"/>
+
+
+```{r eval=FALSE, include=FALSE}
 
 #this is wrong 
 
-st_drop_geometry(test_data) %>%
+library(sf)
+
+test_data %>%
   group_by(census_tract) %>%
   summarize(MAPE = mean(Price.APE, na.rm = T)) %>%
-  ungroup() %>% 
-  cross_join( tracts21)%>%
-    st_sf() %>%
+  ungroup() 
+
+st_join(tracts21, test_data)%>%
+  #  st_sf() %>%
     ggplot() + 
    geom_sf(aes(fill = MAPE)) +
-      scale_fill_gradient(low = palettee[5], high = palettee[1],
-                          name = "MAPE") +
-  geom_sf(data = test_data, colour = "black", show.legend = "point", size = .5) +
-      labs(title = "Mean test set MAPE by Block Groups",
+  scale_fill_gradient2(
+    low = "#2c7bb6",  
+    mid = "#ffffbf",  
+    high = "#d7191c",   
+    midpoint = 0,   
+    limits = c(0, 1),  
+    breaks = c(0, 0.2, 0.4, 0.8, 1),  # Specify break points
+    labels = c("<= 0", "0 to 0.2", "0.2 to 0.4", "0.4 to 0.8", ">= 1"),  # Labels for breaks
+    name = "MAPE Classes"  # Legend title
+  )  +
+  geom_sf(data = test_data, colour = "black", alpha = 0.5,  show.legend = "point", size = .5) +
+      labs(title = "Mean test set MAPE by Census Tract",
            caption = "Figure 7.3") +
       mapTheme()
 
+```
+
+```{r eval=FALSE, include=FALSE}
+# First, join the data frames
+joined_data <- st_join(tracts21, test_data)
+
+# Then, calculate MAPE
+mape_data <- joined_data %>%
+  group_by(census_tract) %>%
+  summarize(MAPE = mean(Price.APE, na.rm = TRUE)) %>%
+  ungroup()
+
+# Create the plot
+ggplot() + 
+  geom_sf(data = joined_data, aes(fill = MAPE), size = 0.5) +
+  scale_fill_gradient2(
+    low = "#2c7bb6",
+    mid = "#ffffbf",
+    high = "#d7191c",
+    midpoint = 0,
+    limits = c(0, 1),
+    breaks = c(0, 0.2, 0.4, 0.8, 1),
+    labels = c("<= 0", "0 to 0.2", "0.2 to 0.4", "0.4 to 0.8", ">= 1"),
+    name = "MAPE Classes"
+  ) +
+  geom_sf(data = mape_data, color = "black", alpha = 0.5, size = 0.5) +
+  labs(
+    title = "Mean test set MAPE by Census Tract",
+    caption = "Figure 7.3"
+  ) +
+  mapTheme()
 ```
 
 ```{r}
@@ -1473,18 +1649,70 @@ test_data <-
   test_data %>%
   group_by(census_tract) %>%
   mutate(MAPE = mean(Price.APE)) %>%
-  filter(MAPE> -100)
+  filter(MAPE> 0)
 
 ggplot(test_data) +
   geom_point(aes(MeanPrice, MAPE)) +
   geom_smooth(method = "lm", aes(MeanPrice, MAPE), se = FALSE, colour = "green") +
-  labs(title = "MAPE by Block Group as a function of mean price by Block Group",
+  labs(title = "MAPE by Census Tract as a function of Mean Price by Census Tract",
        x = "Mean Home Price", y = "MAPE",
        caption = "Figure 7.5") +
   plotTheme()
 ```
 
+## Tidycensus 
+
+We conducted an in-depth analysis of the relationship between race and income in our study. Our findings revealed that the Mean Absolute Percentage Error (MAPE) is notably high in predominantly white neighborhoods, suggesting that our predictive model may not perform well in these areas. Similarly, for income levels, we observed better predictions in high-income neighborhoods, with a lower MAPE. This could potentially signify the presence of missing variables or other factors that are not adequately accounted for in our model.
+
+``` {r}
+
+Context <-
+  tracts21 %>%
+  mutate(Race = ifelse(PctWhite > 15, "Majority Non-White", "Majority White"),
+         Income = ifelse(med_income > 80000, "High Income", "Low Income")) 
+
+```
+```{r}
+
+test_data <- test_data %>%
+  mutate(Regression = "Regression")
+
+
+st_join(test_data, Context) %>% 
+  group_by(Regression, Race) %>%
+  summarize(mean.MAPE = scales::percent(mean(Price.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(Race, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood racial context (Figure 8.3)") %>%
+  kable_styling("striped",full_width = F) 
+```
+
+```{r}
+
+st_join(test_data, Context) %>% 
+  group_by(Regression, Income) %>%
+  summarize(mean.MAPE = scales::percent(mean(Price.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(Income, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood racial context (Figure 8.3)") %>%
+  kable_styling("striped",full_width = F) 
+
+
+```
+
+
+
+# Discussion 
+
+Assessing the model's effectiveness is a nuanced task. While it exhibits moderate generalizability, the presence of notably high errors raises concerns about its predictive accuracy. One intriguing finding was the lack of spatial correlation with sale prices, defying the intuitive expectation that properties near landmarks or private schools would command higher prices. We were able to predict approximately 70% of the variance in sale prices, which is a reasonable level of explanatory power for a regression model.
+
+Understanding the errors in predictions is complicated by their dispersed nature and the absence of clustering. The low Moran's I statistic indicates a lack of spatial autocorrelation, making it challenging to attribute errors to specific geographic patterns. The influence of demographic factors, as outlined earlier, may be contributing to the observed errors.
+
+When it comes to spatial variation, the dispersed errors make it difficult to identify specific areas where the model performed exceptionally well or poorly. However, it's worth noting that there is a higher error count in South and Center City, suggesting the possibility of unaccounted spatial factors in those regions.
+
 # Prediction Challenge 
+
+All those things considered we used the model to predict home prices for the challenge data set. We notice that the number has gone down from 100 to 79, but we know that this is as a consequence of our data cleaning and removing data points with missing or incomplete values that could not be imputed (such as year built). 
 
 ```{r}
 
@@ -1493,22 +1721,35 @@ ggplot(test_data) +
 reg1 <- lm(sale_price ~ ., data = st_drop_geometry(data_og) %>%  
              dplyr::filter(toPredict == "MODELLING") %>%
                                  dplyr::select(variables))
-
-data_pred <- st_drop_geometry(data_og)%>%
-  filter(toPredict== "CHALLENGE")
   
 data_pred <-
-  data_pred %>%
-  mutate(Price.Predict = predict(reg1,data_pred))
+  data_og %>%
+  mutate(Price.Predict = predict(reg1,data_og))
 
 final_pred <- st_drop_geometry(data_pred)%>%
+   filter(toPredict== "CHALLENGE")%>%
   select(musaID,Price.Predict)%>%
   mutate(team = "Sam and Roshini")
 
-# pretty regression
+write.csv(final_pred, "./outputs/skhare_rganesh_challenge.csv")
 
-print(stargazer(reg1, type="text", digits=1, title="Linear Model of Training Dataset (Figure 5)", out = "Training LM.txt"))
+#map 
+
+ggplot() +
+  geom_sf(data = tracts21, fill = "grey89", color = "grey89") +
+  geom_sf(data = data_pred, aes(colour = q5(Price.Predict)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palettee,
+                   labels=qBr(data_pred,"Price.Predict"),
+                   name="Quintile\nBreaks") +
+  labs(title="Predicted Sale Price for all Data", 
+       subtitle = "Philadelphia") +
+  mapTheme()
+
 
 ```
 
+# Conclusion
+
+We would recommend this model to Zillow if the errors weren't so high. The model performs well in many contexts but if time was no bound, we would have really liked to explore more variables and refine it more to minimize the errors before sharing the model. 
 
